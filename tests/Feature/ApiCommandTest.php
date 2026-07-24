@@ -255,6 +255,41 @@ it('fails json mode safely when a successful raw response is not valid json', fu
         ->not->toContain('<html>');
 });
 
+it('writes null in json mode for successful responses without a body', function (int $status) {
+    Http::fake(['https://api.quickpay.net/empty' => Http::response('', $status)]);
+    $command = new ApiCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+
+    $exitCode = $tester->execute([
+        'method' => 'GET',
+        'path' => '/empty',
+        '--json' => true,
+    ], ['capture_stderr_separately' => true]);
+
+    expect($exitCode)->toBe(0)
+        ->and($tester->getDisplay())->toBe('null')
+        ->and($tester->getErrorOutput())->toBe('');
+})->with([200, 204]);
+
+it('still rejects a nonempty malformed 204 body in json mode', function () {
+    Http::fake(['https://api.quickpay.net/empty' => Http::response('<html>not empty</html>', 204)]);
+    $command = new ApiCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+
+    $exitCode = $tester->execute([
+        'method' => 'GET',
+        'path' => '/empty',
+        '--json' => true,
+    ], ['capture_stderr_separately' => true]);
+
+    expect($exitCode)->toBe(1)
+        ->and($tester->getDisplay())->toBe('')
+        ->and($tester->getErrorOutput())->toContain('valid JSON')
+        ->not->toContain('<html>');
+});
+
 it('semantically redacts escaped credentials while keeping json output valid', function () {
     putenv('QUICKPAY_API_KEY=a/b');
     $raw = '{"escaped":"a\\/b","safe":"unchanged"}';
@@ -300,6 +335,32 @@ it('renders structured api errors to stderr with credential redaction', function
         ->toContain('amount: Too high')
         ->toContain('error_code: invalid_request')
         ->not->toContain('raw-api-secret');
+});
+
+it('renders api error summaries without terminal control bytes', function () {
+    Http::fake(['https://api.quickpay.net/payments/42' => Http::response([
+        'message' => "Rejected\e]0;owned\x07\rline\nnext\r\nend",
+        'errors' => ['amount' => ["Too\tlarge"]],
+    ], 422)]);
+    $command = new ApiCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+
+    $status = $tester->execute([
+        'method' => 'POST',
+        'path' => '/payments/42',
+        '--yes' => true,
+        '--json' => true,
+    ], ['capture_stderr_separately' => true]);
+    $error = $tester->getErrorOutput();
+
+    expect($status)->toBe(1)
+        ->and($tester->getDisplay())->toBe('')
+        ->and($error)->toContain('Rejected\\x1B]0;owned\\x07\\x0Dline')
+        ->toContain('\\x0Anext\\x0D\\x0Aend')
+        ->toContain('Too\\x09large')
+        ->not->toContain("\e")
+        ->not->toContain("\x07");
 });
 
 it('redacts a reflected basic-auth token from raw api errors', function () {

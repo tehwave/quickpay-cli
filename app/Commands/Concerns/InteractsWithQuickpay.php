@@ -2,13 +2,13 @@
 
 namespace App\Commands\Concerns;
 
-use App\Credentials\CredentialRedactor;
 use App\Credentials\CredentialStore;
 use App\Credentials\Exceptions\CredentialStoreException;
 use App\Quickpay\Exceptions\QuickpayRequestException;
 use App\Quickpay\QuickpayClient;
 use App\Quickpay\QuickpayClientFactory;
 use App\Quickpay\QuickpayResponse;
+use App\Support\ResponseBodySanitizer;
 use Closure;
 use InvalidArgumentException;
 
@@ -35,13 +35,13 @@ trait InteractsWithQuickpay
         try {
             return $callback($clients->make($apiKey), $apiKey);
         } catch (InvalidArgumentException|QuickpayRequestException $exception) {
-            return $this->failure(CredentialRedactor::redact($exception->getMessage(), $apiKey));
+            return $this->failure(ResponseBodySanitizer::terminalLine($exception->getMessage(), $apiKey));
         }
     }
 
     protected function responseFailure(QuickpayResponse $response, string $apiKey): int
     {
-        return $this->failure(CredentialRedactor::redact($response->errorSummary(), $apiKey));
+        return $this->failure(ResponseBodySanitizer::terminalLine($response->errorSummary(), $apiKey));
     }
 
     protected function positiveInteger(mixed $value, string $name): int

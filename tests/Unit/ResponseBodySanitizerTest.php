@@ -46,6 +46,13 @@ it('preserves printable text and newlines while visibly encoding unsafe terminal
         ->toBe("hello\nworld\r\n[redacted]\\x09\\x1B]0;owned\\x07\\x0Dlone\\x9D");
 });
 
+it('visibly encodes every terminal control in single-line fields', function () {
+    $input = "hello\nworld\r\nsecret\t\e]0;owned\x07\rlone";
+
+    expect(ResponseBodySanitizer::terminalLine($input, 'secret'))
+        ->toBe('hello\\x0Aworld\\x0D\\x0A[redacted]\\x09\\x1B]0;owned\\x07\\x0Dlone');
+});
+
 it('removes colliding raw credentials and basic-auth tokens from valid json and terminal text', function () {
     $apiKey = '[redacted]';
     $token = base64_encode(':'.$apiKey);

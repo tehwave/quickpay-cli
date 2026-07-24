@@ -78,6 +78,70 @@ it('uses DKK as the default currency and renders created details', function () {
     Http::assertSent(fn (Request $request): bool => $request->data()['currency'] === 'DKK');
 });
 
+it('sanitizes credentials and terminal controls in create json and human output', function () {
+    $token = base64_encode(':create-secret');
+    $raw = json_encode([
+        'id' => 81,
+        'order_id' => "create-secret\e]0;owned\x07",
+        'state' => $token,
+    ], JSON_THROW_ON_ERROR);
+    Http::fake(['https://api.quickpay.net/payments' => Http::response($raw, 201)]);
+    $jsonCommand = new PaymentsCreateCommand;
+    $jsonCommand->setLaravel(app());
+    $jsonTester = new CommandTester($jsonCommand);
+
+    $jsonStatus = $jsonTester->execute(
+        ['order-id' => 'order-81', '--json' => true],
+        ['capture_stderr_separately' => true],
+    );
+    $json = $jsonTester->getDisplay();
+
+    expect($jsonStatus)->toBe(0)
+        ->and(json_validate($json))->toBeTrue()
+        ->and($json)->not->toContain('create-secret')->not->toContain($token);
+
+    $humanCommand = new PaymentsCreateCommand;
+    $humanCommand->setLaravel(app());
+    $humanTester = new CommandTester($humanCommand);
+    $humanStatus = $humanTester->execute(['order-id' => 'order-81']);
+    $display = $humanTester->getDisplay();
+
+    expect($humanStatus)->toBe(0)
+        ->and($display)->toContain('[redacted]\\x1B]0;owned\\x07')
+        ->not->toContain('create-secret')
+        ->not->toContain($token)
+        ->not->toContain("\e");
+});
+
+it('rejects invalid successful create bodies before writing json', function (string $body) {
+    Http::fake(['https://api.quickpay.net/payments' => Http::response($body, 201)]);
+    $command = new PaymentsCreateCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+
+    $status = $tester->execute(
+        ['order-id' => 'order-81', '--json' => true],
+        ['capture_stderr_separately' => true],
+    );
+
+    expect($status)->toBe(1)
+        ->and($tester->getDisplay())->toBe('')
+        ->and($tester->getErrorOutput())->toContain('invalid created payment')
+        ->not->toContain($body);
+})->with([
+    'invalid json' => '<html>not json</html>',
+    'scalar json' => '42',
+    'list json' => '[{"id":81}]',
+]);
+
+it('accepts an empty json object as an object-shaped create response', function () {
+    Http::fake(['https://api.quickpay.net/payments' => Http::response('{}', 201)]);
+
+    $this->artisan('payments:create', ['order-id' => 'order-81', '--json' => true])
+        ->expectsOutput('{}')
+        ->assertExitCode(0);
+});
+
 it('validates create arguments and fields before making a request', function (array $arguments, string $message) {
     Http::fake();
 

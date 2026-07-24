@@ -72,6 +72,70 @@ it('renders payment details and an operations table', function () {
         ->toContain('000 OK');
 });
 
+it('sanitizes credentials and terminal controls in get json and human output', function () {
+    $token = base64_encode(':get-secret');
+    $raw = json_encode([
+        'id' => 42,
+        'order_id' => "get-secret\e]0;owned\x07",
+        'state' => $token,
+    ], JSON_THROW_ON_ERROR);
+    Http::fake(['https://api.quickpay.net/payments/42*' => Http::response($raw)]);
+    $jsonCommand = new PaymentsGetCommand;
+    $jsonCommand->setLaravel(app());
+    $jsonTester = new CommandTester($jsonCommand);
+
+    $jsonStatus = $jsonTester->execute(
+        ['id' => '42', '--json' => true],
+        ['capture_stderr_separately' => true],
+    );
+    $json = $jsonTester->getDisplay();
+
+    expect($jsonStatus)->toBe(0)
+        ->and(json_validate($json))->toBeTrue()
+        ->and($json)->not->toContain('get-secret')->not->toContain($token);
+
+    $humanCommand = new PaymentsGetCommand;
+    $humanCommand->setLaravel(app());
+    $humanTester = new CommandTester($humanCommand);
+    $humanStatus = $humanTester->execute(['id' => '42']);
+    $display = $humanTester->getDisplay();
+
+    expect($humanStatus)->toBe(0)
+        ->and($display)->toContain('[redacted]\\x1B]0;owned\\x07')
+        ->not->toContain('get-secret')
+        ->not->toContain($token)
+        ->not->toContain("\e");
+});
+
+it('rejects invalid successful get bodies before writing json', function (string $body) {
+    Http::fake(['https://api.quickpay.net/payments/42*' => Http::response($body)]);
+    $command = new PaymentsGetCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+
+    $status = $tester->execute(
+        ['id' => '42', '--json' => true],
+        ['capture_stderr_separately' => true],
+    );
+
+    expect($status)->toBe(1)
+        ->and($tester->getDisplay())->toBe('')
+        ->and($tester->getErrorOutput())->toContain('invalid payment')
+        ->not->toContain($body);
+})->with([
+    'invalid json' => '<html>not json</html>',
+    'scalar json' => '42',
+    'list json' => '[{"id":42}]',
+]);
+
+it('accepts an empty json object as an object-shaped get response', function () {
+    Http::fake(['https://api.quickpay.net/payments/42*' => Http::response('{}')]);
+
+    $this->artisan('payments:get', ['id' => '42', '--json' => true])
+        ->expectsOutput('{}')
+        ->assertExitCode(0);
+});
+
 it('validates payment id and operations size before making a request', function (array $arguments, string $message) {
     Http::fake();
 

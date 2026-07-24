@@ -45,3 +45,41 @@ it('removes a sensitive value recreated beside a readable replacement', function
     expect(CredentialRedactor::containsSensitiveValue($safe, 'a['))->toBeFalse()
         ->and($safe)->not->toContain('a[');
 });
+
+it('redacts percent and form encoded credential representations', function () {
+    $apiKey = 'secret /?&+=%';
+    $rawEncoded = rawurlencode($apiKey);
+    $formEncoded = urlencode($apiKey);
+    $lowercaseEscapes = preg_replace_callback(
+        '/%[0-9A-F]{2}/',
+        fn (array $match): string => strtolower($match[0]),
+        $rawEncoded,
+    );
+
+    $safe = CredentialRedactor::redact(
+        "raw={$rawEncoded}; form={$formEncoded}; lowercase={$lowercaseEscapes}",
+        $apiKey,
+    );
+
+    expect(CredentialRedactor::containsSensitiveValue($rawEncoded, $apiKey))->toBeTrue()
+        ->and(CredentialRedactor::containsSensitiveValue($formEncoded, $apiKey))->toBeTrue()
+        ->and(CredentialRedactor::containsSensitiveValue($lowercaseEscapes, $apiKey))->toBeTrue()
+        ->and(CredentialRedactor::containsSensitiveValue($safe, $apiKey))->toBeFalse()
+        ->and($safe)->not->toContain($rawEncoded)
+        ->not->toContain($formEncoded)
+        ->not->toContain($lowercaseEscapes);
+});
+
+it('redacts a credential whose every byte is percent encoded', function () {
+    $apiKey = 'ordinary-secret';
+    $encoded = implode('', array_map(
+        fn (string $byte): string => sprintf('%%%02X', ord($byte)),
+        str_split($apiKey),
+    ));
+    $lowercase = strtolower($encoded);
+    $safe = CredentialRedactor::redact("upper={$encoded}; lower={$lowercase}", $apiKey);
+
+    expect(CredentialRedactor::containsSensitiveValue($encoded, $apiKey))->toBeTrue()
+        ->and(CredentialRedactor::containsSensitiveValue($lowercase, $apiKey))->toBeTrue()
+        ->and($safe)->not->toContain($encoded)->not->toContain($lowercase);
+});

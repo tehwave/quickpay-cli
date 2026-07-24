@@ -8,7 +8,6 @@ use App\Credentials\CredentialStore;
 use App\Quickpay\QuickpayClient;
 use App\Quickpay\QuickpayClientFactory;
 use Illuminate\Console\Command;
-use InvalidArgumentException;
 
 class PaymentsGetCommand extends Command
 {
@@ -36,21 +35,19 @@ class PaymentsGetCommand extends Command
                 return $this->responseFailure($response, $apiKey);
             }
 
+            $payment = $this->jsonObject($response, 'Quickpay returned an invalid payment.');
+
             if ($this->option('json')) {
-                $this->writeOriginalJson($response);
+                $this->writeOriginalJson($response, $apiKey);
 
                 return self::SUCCESS;
             }
 
-            if (! is_array($response->json) || array_is_list($response->json)) {
-                throw new InvalidArgumentException('Quickpay returned an invalid payment.');
-            }
-
-            $this->writePaymentDetails($response->json);
-            $operations = $response->json['operations'] ?? [];
+            $this->writePaymentDetails($payment, $apiKey);
+            $operations = $payment['operations'] ?? [];
 
             if (is_array($operations) && array_is_list($operations)) {
-                $this->writeOperationsTable($operations);
+                $this->writeOperationsTable($operations, $apiKey);
             }
 
             return self::SUCCESS;

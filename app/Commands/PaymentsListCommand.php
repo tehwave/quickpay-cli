@@ -7,7 +7,6 @@ use App\Commands\Concerns\WritesPaymentOutput;
 use App\Credentials\CredentialStore;
 use App\Quickpay\QuickpayClient;
 use App\Quickpay\QuickpayClientFactory;
-use App\Quickpay\QuickpayResponse;
 use App\Support\LinkHeaderParser;
 use App\Support\PaginationTargetCanonicalizer;
 use Illuminate\Console\Command;
@@ -48,20 +47,20 @@ class PaymentsListCommand extends Command
                 return $this->responseFailure($response, $apiKey);
             }
 
+            $payments = $this->jsonList($response, 'Quickpay returned an invalid payment list.');
+
             if (! $this->option('all')) {
                 if ($this->option('json')) {
-                    $this->writeOriginalJson($response);
+                    $this->writeOriginalJson($response, $apiKey);
 
                     return self::SUCCESS;
                 }
 
-                $payments = $this->paymentList($response);
-                $this->writePaymentsTable($payments);
+                $this->writePaymentsTable($payments, $apiKey);
 
                 return self::SUCCESS;
             }
 
-            $payments = $this->paymentList($response);
             $pageCount = 1;
             $seen = [PaginationTargetCanonicalizer::fromQuery('/payments', $query) => true];
             $next = LinkHeaderParser::next($response->header('Link'));
@@ -85,17 +84,17 @@ class PaymentsListCommand extends Command
                     return $this->responseFailure($response, $apiKey);
                 }
 
-                array_push($payments, ...$this->paymentList($response));
+                array_push($payments, ...$this->jsonList($response, 'Quickpay returned an invalid payment list.'));
                 $next = LinkHeaderParser::next($response->header('Link'));
             }
 
             if ($this->option('json')) {
-                $this->getOutput()->write(json_encode($payments, JSON_UNESCAPED_SLASHES));
+                $this->writeJsonValue($payments, $apiKey);
 
                 return self::SUCCESS;
             }
 
-            $this->writePaymentsTable($payments);
+            $this->writePaymentsTable($payments, $apiKey);
 
             return self::SUCCESS;
         });
@@ -136,15 +135,5 @@ class PaymentsListCommand extends Command
         $query['page_size'] = $pageSize;
 
         return $query;
-    }
-
-    /** @return array<int, mixed> */
-    private function paymentList(QuickpayResponse $response): array
-    {
-        if (! is_array($response->json) || ! array_is_list($response->json)) {
-            throw new InvalidArgumentException('Quickpay returned an invalid payment list.');
-        }
-
-        return $response->json;
     }
 }

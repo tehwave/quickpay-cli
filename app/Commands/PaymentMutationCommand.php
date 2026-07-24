@@ -4,7 +4,6 @@ namespace App\Commands;
 
 use App\Commands\Concerns\InteractsWithQuickpay;
 use App\Commands\Concerns\WritesPaymentOutput;
-use App\Credentials\CredentialRedactor;
 use App\Credentials\CredentialStore;
 use App\Quickpay\QuickpayClient;
 use App\Quickpay\QuickpayClientFactory;
@@ -78,7 +77,7 @@ abstract class PaymentMutationCommand extends Command
                 throw new InvalidArgumentException('Quickpay returned an invalid payment mutation response.');
             }
 
-            $this->writePaymentDetails($payment);
+            $this->writePaymentDetails($payment, $apiKey);
 
             return self::SUCCESS;
         });
@@ -109,7 +108,7 @@ abstract class PaymentMutationCommand extends Command
         }
 
         foreach ($fields as $label => $value) {
-            $rendered = CredentialRedactor::redact($this->paymentValue($value), $apiKey);
+            $rendered = $this->paymentValue($value, $apiKey);
             $this->writeSafetyLine("{$label}: {$rendered}");
         }
     }

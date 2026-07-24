@@ -113,6 +113,15 @@ final class ResponseBodySanitizer
         return $safe;
     }
 
+    public static function terminalLine(string $body, string $apiKey): string
+    {
+        return str_replace(
+            ["\r\n", "\n"],
+            ['\\x0D\\x0A', '\\x0A'],
+            self::terminalText($body, $apiKey),
+        );
+    }
+
     private static function redactJsonValue(mixed $value, string $apiKey, bool &$changed): mixed
     {
         if ($value instanceof stdClass) {

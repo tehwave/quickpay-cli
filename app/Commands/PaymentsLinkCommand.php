@@ -10,6 +10,7 @@ use App\Quickpay\QuickpayClientFactory;
 use App\Support\KeyValueParser;
 use Illuminate\Console\Command;
 use InvalidArgumentException;
+use Symfony\Component\Console\Output\OutputInterface;
 
 class PaymentsLinkCommand extends Command
 {
@@ -67,19 +68,23 @@ class PaymentsLinkCommand extends Command
                 return $this->responseFailure($response, $apiKey);
             }
 
-            if ($this->option('json')) {
-                $this->writeOriginalJson($response);
-
-                return self::SUCCESS;
-            }
-
-            $url = is_array($response->json) ? ($response->json['url'] ?? null) : null;
+            $link = $this->jsonObject($response, 'Quickpay did not return a payment link URL.');
+            $url = $link['url'] ?? null;
 
             if (! is_string($url) || $url === '') {
                 throw new InvalidArgumentException('Quickpay did not return a payment link URL.');
             }
 
-            $this->info("Payment link: {$url}");
+            if ($this->option('json')) {
+                $this->writeOriginalJson($response, $apiKey);
+
+                return self::SUCCESS;
+            }
+
+            $this->getOutput()->writeln(
+                'Payment link: '.$this->safeTerminalText($url, $apiKey),
+                OutputInterface::OUTPUT_RAW,
+            );
 
             return self::SUCCESS;
         });

@@ -53,6 +53,11 @@ jobs:
           php-version: '8.5'
           coverage: none
       - run: composer install --no-interaction --no-progress --prefer-dist
+      - run: test -x builds/quickpay
+      - run: builds/quickpay --version
+      - run: builds/quickpay list
+      - run: php scripts/verify-phar-source.php builds/quickpay
       - run: composer build
       - run: builds/quickpay --version
       - run: builds/quickpay list
+      - run: php scripts/verify-phar-source.php builds/quickpay

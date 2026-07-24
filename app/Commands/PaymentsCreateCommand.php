@@ -48,17 +48,15 @@ class PaymentsCreateCommand extends Command
                 return $this->responseFailure($response, $apiKey);
             }
 
+            $payment = $this->jsonObject($response, 'Quickpay returned an invalid created payment.');
+
             if ($this->option('json')) {
-                $this->writeOriginalJson($response);
+                $this->writeOriginalJson($response, $apiKey);
 
                 return self::SUCCESS;
             }
 
-            if (! is_array($response->json) || array_is_list($response->json)) {
-                throw new InvalidArgumentException('Quickpay returned an invalid created payment.');
-            }
-
-            $this->writePaymentDetails($response->json);
+            $this->writePaymentDetails($payment, $apiKey);
 
             return self::SUCCESS;
         });

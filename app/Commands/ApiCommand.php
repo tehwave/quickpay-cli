@@ -75,6 +75,12 @@ class ApiCommand extends Command
             }
 
             if ($this->option('json')) {
+                if ($response->rawBody === '') {
+                    $this->getOutput()->write('null');
+
+                    return self::SUCCESS;
+                }
+
                 $this->getOutput()->write(ResponseBodySanitizer::json($response->rawBody, $apiKey));
 
                 return self::SUCCESS;

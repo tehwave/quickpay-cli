@@ -74,6 +74,42 @@ it('renders a useful human payment table', function () {
         ->toContain('2500');
 });
 
+it('sanitizes credentials and terminal controls in list json and human output', function () {
+    $token = base64_encode(':list-secret');
+    $raw = json_encode([[
+        'id' => 12,
+        'order_id' => "list-secret\e]0;owned\x07",
+        'state' => $token,
+    ]], JSON_THROW_ON_ERROR);
+    Http::fake(['https://api.quickpay.net/payments*' => Http::response($raw)]);
+    $jsonCommand = new PaymentsListCommand;
+    $jsonCommand->setLaravel(app());
+    $jsonTester = new CommandTester($jsonCommand);
+
+    $jsonStatus = $jsonTester->execute(
+        ['--json' => true],
+        ['capture_stderr_separately' => true],
+    );
+    $json = $jsonTester->getDisplay();
+
+    expect($jsonStatus)->toBe(0)
+        ->and(json_validate($json))->toBeTrue()
+        ->and($json)->not->toContain('list-secret')->not->toContain($token)
+        ->and(json_decode($json, true)[0]['order_id'])->toContain('[redacted]');
+
+    $humanCommand = new PaymentsListCommand;
+    $humanCommand->setLaravel(app());
+    $humanTester = new CommandTester($humanCommand);
+    $humanStatus = $humanTester->execute([]);
+    $display = $humanTester->getDisplay();
+
+    expect($humanStatus)->toBe(0)
+        ->and($display)->toContain('[redacted]\\x1B]0;owned\\x07')
+        ->not->toContain('list-secret')
+        ->not->toContain($token)
+        ->not->toContain("\e");
+});
+
 it('aggregates all linked pages in order as one json array', function () {
     Http::fake([
         'https://api.quickpay.net/payments?page_size=2' => Http::response(
@@ -87,6 +123,85 @@ it('aggregates all linked pages in order as one json array', function () {
     $this->artisan('payments:list', ['--page-size' => '2', '--all' => true, '--json' => true])
         ->expectsOutput('[{"id":1},{"id":2},{"id":3}]')
         ->assertExitCode(0);
+
+    Http::assertSentCount(2);
+});
+
+it('sanitizes credentials while aggregating all pages as json', function () {
+    $token = base64_encode(':list-secret');
+    Http::fake([
+        'https://api.quickpay.net/payments?page_size=1' => Http::response(
+            [['id' => 1, 'order_id' => 'list-secret']],
+            200,
+            ['Link' => '<https://api.quickpay.net/payments?page_key=next>; rel="next"'],
+        ),
+        'https://api.quickpay.net/payments?page_key=next' => Http::response([
+            ['id' => 2, 'order_id' => $token],
+        ]),
+    ]);
+    $command = new PaymentsListCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+
+    $status = $tester->execute([
+        '--page-size' => '1',
+        '--all' => true,
+        '--json' => true,
+    ], ['capture_stderr_separately' => true]);
+    $json = $tester->getDisplay();
+
+    expect($status)->toBe(0)
+        ->and(json_validate($json))->toBeTrue()
+        ->and(json_decode($json, true))->toBe([
+            ['id' => 1, 'order_id' => '[redacted]'],
+            ['id' => 2, 'order_id' => '[redacted]'],
+        ])
+        ->and($json)->not->toContain('list-secret')->not->toContain($token);
+});
+
+it('rejects invalid successful list bodies before writing json', function (string $body) {
+    Http::fake(['https://api.quickpay.net/payments*' => Http::response($body)]);
+    $command = new PaymentsListCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+
+    $status = $tester->execute(
+        ['--json' => true],
+        ['capture_stderr_separately' => true],
+    );
+
+    expect($status)->toBe(1)
+        ->and($tester->getDisplay())->toBe('')
+        ->and($tester->getErrorOutput())->toContain('invalid payment list')
+        ->not->toContain($body);
+})->with([
+    'invalid json' => '<html>not json</html>',
+    'scalar json' => '42',
+    'object json' => '{"id":42}',
+]);
+
+it('rejects an invalid later page before writing aggregated json', function () {
+    Http::fake([
+        'https://api.quickpay.net/payments?page_size=1' => Http::response(
+            [['id' => 1]],
+            200,
+            ['Link' => '<https://api.quickpay.net/payments?page_key=next>; rel="next"'],
+        ),
+        'https://api.quickpay.net/payments?page_key=next' => Http::response('{"id":2}'),
+    ]);
+    $command = new PaymentsListCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+
+    $status = $tester->execute([
+        '--page-size' => '1',
+        '--all' => true,
+        '--json' => true,
+    ], ['capture_stderr_separately' => true]);
+
+    expect($status)->toBe(1)
+        ->and($tester->getDisplay())->toBe('')
+        ->and($tester->getErrorOutput())->toContain('invalid payment list');
 
     Http::assertSentCount(2);
 });

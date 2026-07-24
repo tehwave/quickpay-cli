@@ -235,6 +235,63 @@ it('renders mutation api errors on stderr without exposing the credential', func
         ->not->toContain('mutation-secret');
 });
 
+it('sanitizes terminal controls and credentials in mutation summaries and human results', function () {
+    $token = base64_encode(':mutation-secret');
+    Http::fake([
+        'https://api.quickpay.net/payments/42' => Http::response([
+            ...paymentFixture(),
+            'order_id' => "mutation-secret\e]0;summary\x07\nnext\r\nend",
+            'state' => $token,
+        ]),
+        'https://api.quickpay.net/payments/42/refund' => Http::response([
+            'id' => 42,
+            'order_id' => "mutation-secret\e]0;result\x07",
+            'state' => $token,
+        ]),
+    ]);
+    $command = new PaymentsRefundCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+
+    $status = $tester->execute([
+        'id' => '42',
+        'amount' => '300',
+        '--yes' => true,
+    ]);
+    $display = $tester->getDisplay();
+
+    expect($status)->toBe(0)
+        ->and($display)->toContain('[redacted]\\x1B]0;summary\\x07\\x0Anext\\x0D\\x0Aend')
+        ->toContain('[redacted]\\x1B]0;result\\x07')
+        ->not->toContain('mutation-secret')
+        ->not->toContain($token)
+        ->not->toContain("\e")
+        ->not->toContain("\x07");
+});
+
+it('renders payment error summaries without terminal control bytes', function () {
+    Http::fake(['https://api.quickpay.net/payments/42' => Http::response([
+        'message' => "Missing\e]0;owned\x07\rpayment",
+    ], 404)]);
+    $command = new PaymentsRefundCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+
+    $status = $tester->execute([
+        'id' => '42',
+        'amount' => '300',
+        '--yes' => true,
+        '--json' => true,
+    ], ['capture_stderr_separately' => true]);
+    $error = $tester->getErrorOutput();
+
+    expect($status)->toBe(1)
+        ->and($tester->getDisplay())->toBe('')
+        ->and($error)->toContain('Missing\\x1B]0;owned\\x07\\x0Dpayment')
+        ->not->toContain("\e")
+        ->not->toContain("\x07");
+});
+
 it('fails json mode safely when a successful payment mutation response is not valid json', function () {
     Http::fake([
         'https://api.quickpay.net/payments/42' => Http::response(paymentFixture()),
