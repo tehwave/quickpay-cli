@@ -96,13 +96,13 @@ it('normalizes only volatile composer root identity and initializer suffixes', f
     $expectedInstalled = <<<'PHP'
 <?php return array(
 'root' => array(
-'name' => 'peterchrjoergensen/quickpay-cli',
+'name' => 'tehwave/quickpay-cli',
 'pretty_version' => 'dev-main',
 'version' => 'dev-main',
 'reference' => null,
 ),
 'versions' => array(
-'peterchrjoergensen/quickpay-cli' => array(
+'tehwave/quickpay-cli' => array(
 'pretty_version' => 'dev-main',
 'version' => 'dev-main',
 'reference' => null,

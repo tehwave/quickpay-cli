@@ -1,5 +1,5 @@
 {
-    "name": "peterchrjoergensen/quickpay-cli",
+    "name": "tehwave/quickpay-cli",
     "description": "Command-line client for the Quickpay API.",
     "keywords": ["quickpay", "cli", "payments"],
     "type": "project",

@@ -28,7 +28,7 @@ The source launcher is `php quickpay`; use it while developing the project.
 After a public release, the intended installation will be:
 
 ```bash
-composer global require peterchrjoergensen/quickpay-cli
+composer global require tehwave/quickpay-cli
 quickpay --version
 ```
 
@@ -38,7 +38,7 @@ If `quickpay` is not found, add Composer's global bin directory to `PATH`. Disco
 composer global config bin-dir --absolute
 ```
 
-Then open a new shell and run `quickpay --version`. Until publication, the global-require command and `skills add peterchrjoergensen/quickpay-cli` are only future instructions and will not install anything.
+Then open a new shell and run `quickpay --version`. Until publication, the global-require command and `skills add tehwave/quickpay-cli` are only future instructions and will not install anything.
 
 ## Authentication and credentials
 
@@ -141,7 +141,7 @@ php scripts/verify-phar-source.php builds/quickpay dev
 
 The integrity verifier derives the complete expected archive from `box.json`, the checkout, `composer.json`, `composer.lock`, and the installed Box compiler. It checks the exact packaged file set across application, bootstrap, configuration, launcher, Composer, vendor, and Box runtime files, plus the executable stub. PHP is compared byte-for-byte after replaying the exact installed Box PHP compactor. JSON and all other files are compared byte-for-byte without semantic normalization, which preserves object/list distinctions and integers larger than 64 bits. Only proven Composer install volatility is normalized: this project's generated root identity, Composer's generated initializer suffix, and Pest's plugin ordering. Root and dependency class-to-path mappings remain exact. Box ignores hidden development metadata inside configured directories; no executable PHP or security metadata is otherwise excluded from verification.
 
-There is no self-update command. After publication, updates will use Composer, for example `composer global update peterchrjoergensen/quickpay-cli`.
+There is no self-update command. After publication, updates will use Composer, for example `composer global update tehwave/quickpay-cli`.
 
 ### Future release procedure — not yet performed
 
@@ -154,7 +154,7 @@ There is no self-update command. After publication, updates will use Composer, f
 Only after public publication will the agent reference skill be installable with:
 
 ```bash
-skills add peterchrjoergensen/quickpay-cli
+skills add tehwave/quickpay-cli
 ```
 
 ## License

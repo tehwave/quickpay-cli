@@ -613,7 +613,7 @@ final class PharSourceIntegrityVerifier
 
     private static function normalizeComposerInstalledRootIdentity(string $contents): string
     {
-        foreach (['root', 'peterchrjoergensen/quickpay-cli'] as $package) {
+        foreach (['root', 'tehwave/quickpay-cli'] as $package) {
             $quoted = preg_quote($package, '~');
             $contents = preg_replace_callback(
                 "~(^'{$quoted}' => array\\(\\r?\\n)(.*?)(^\\),\\r?$)~ms",

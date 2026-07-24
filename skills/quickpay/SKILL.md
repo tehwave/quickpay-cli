@@ -4,13 +4,13 @@ description: Use when an agent needs to work with Quickpay payments, payment lin
 license: MIT
 metadata:
   author: Peter Chr. Jorgensen
-  project: peterchrjoergensen/quickpay-cli
+  project: tehwave/quickpay-cli
   version: dev
 ---
 
 # Quickpay CLI
 
-Run `quickpay --version` before use. This skill supports the local CLI; `skills add peterchrjoergensen/quickpay-cli` becomes available only after the project is publicly published.
+Run `quickpay --version` before use. This skill supports the local CLI; `skills add tehwave/quickpay-cli` becomes available only after the project is publicly published.
 
 ## Credentials
 

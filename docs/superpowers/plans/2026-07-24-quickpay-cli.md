@@ -10,7 +10,7 @@ CLI’en får Flare-inspireret struktur, sikker credential-håndtering, læsbart
 
 1. **Repository og fundament**
    - Scaffold `quickpay-cli` med `composer create-project laravel-zero/laravel-zero:^12.0`.
-   - Konfigurér binæren `quickpay`, Composer-pakken `peterchrjoergensen/quickpay-cli`, MIT-licens og PHP `^8.4`.
+   - Konfigurér binæren `quickpay`, Composer-pakken `tehwave/quickpay-cli`, MIT-licens og PHP `^8.4`.
    - Tilføj Pint, Larastan/PHPStan og Pest samt Composer-scripts: `test`, `analyse`, `format`, `format:test`, `build` og `check`.
    - Gem den godkendte plan i `docs/superpowers/plans/2026-07-24-quickpay-cli.md`.
 
@@ -47,7 +47,7 @@ CLI’en får Flare-inspireret struktur, sikker credential-håndtering, læsbart
    - Byg `builds/quickpay` med Laravel Zeros Box-baserede `app:build`, og peg Composer `bin` på PHAR-filen, så en senere Packagist-udgivelse kan installeres globalt.
    - Tilføj GitHub Actions til PHP 8.4/8.5-tests, statisk analyse, formatting-check og PHAR-smoketest; opret ingen GitHub-remote nu.
    - Skriv README med installation, login, alle kommandoer, Quickpays testtransaktioner, sikkerhedsadvarsler og releaseprocedure.
-   - Tilføj `skills/quickpay/SKILL.md` med sikre agent-workflows og en kommando-reference. Forbered installation via `skills add peterchrjoergensen/quickpay-cli`, men dokumentér den først som aktiv efter offentliggørelse.
+   - Tilføj `skills/quickpay/SKILL.md` med sikre agent-workflows og en kommando-reference. Forbered installation via `skills add tehwave/quickpay-cli`, men dokumentér den først som aktiv efter offentliggørelse.
    - Brug Composer-opdatering som update-mekanisme; ingen separat self-update-kommando.
 
 ## Testplan
