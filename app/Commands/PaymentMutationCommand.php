@@ -64,6 +64,7 @@ abstract class PaymentMutationCommand extends Command
             }
 
             $safeJson = ResponseBodySanitizer::json($response->rawBody, $apiKey);
+            $this->jsonObject($response, 'Quickpay returned an invalid payment mutation response.');
 
             if ($this->option('json')) {
                 $this->getOutput()->write($safeJson);
@@ -73,7 +74,7 @@ abstract class PaymentMutationCommand extends Command
 
             $payment = json_decode($safeJson, true, flags: JSON_THROW_ON_ERROR);
 
-            if (! is_array($payment) || array_is_list($payment)) {
+            if (! is_array($payment)) {
                 throw new InvalidArgumentException('Quickpay returned an invalid payment mutation response.');
             }
 

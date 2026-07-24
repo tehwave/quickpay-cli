@@ -45,7 +45,62 @@ it('reports missing extra and semantically changed app files', function () {
         ->toContain('Semantic PHP mismatch: app/Changed.php');
 });
 
-it('matches the committed phar app source to the project app source', function () {
+it('detects drift across every packaged project and dependency category', function () {
+    $issues = PharSourceIntegrityVerifier::compareContents(
+        [
+            'bootstrap/app.php' => '<?php return 1;',
+            'config/commands.php' => '<?php return ["safe"];',
+            'vendor/acme/runtime.php' => '<?php return 2;',
+            'vendor/acme/LICENSE' => 'expected license',
+            'composer.json' => '{"name":"acme/runtime"}',
+            'composer.lock' => '{"content-hash":"expected"}',
+        ],
+        [
+            'config/commands.php' => '<?php return ["changed"];',
+            'vendor/acme/runtime.php' => '<?php return 3;',
+            'vendor/acme/LICENSE' => 'changed license',
+            'composer.json' => "{\n  \"name\": \"acme/runtime\"\n}",
+            'composer.lock' => '{"content-hash":"changed"}',
+            'vendor/acme/extra.php' => '<?php return 4;',
+        ],
+    );
+
+    expect($issues)->toContain('Missing from PHAR: bootstrap/app.php')
+        ->toContain('Extra in PHAR: vendor/acme/extra.php')
+        ->toContain('Semantic PHP mismatch: config/commands.php')
+        ->toContain('Semantic PHP mismatch: vendor/acme/runtime.php')
+        ->toContain('Byte mismatch: vendor/acme/LICENSE')
+        ->toContain('Semantic JSON mismatch: composer.lock')
+        ->not->toContain('Semantic JSON mismatch: composer.json');
+});
+
+it('builds the expected manifest independently from the target phar', function () {
+    $projectRoot = dirname(__DIR__, 2);
+    $manifest = PharSourceIntegrityVerifier::expectedContents($projectRoot, 'dev');
+
+    expect($manifest)->toHaveKeys([
+        'app/Commands/PaymentMutationCommand.php',
+        'bootstrap/app.php',
+        'config/app.php',
+        'quickpay',
+        'composer.json',
+        'composer.lock',
+        'vendor/autoload.php',
+        '.box/bin/check-requirements.php',
+        '.box/.requirements.php',
+    ])->and(count(array_filter(
+        array_keys($manifest),
+        fn (string $path): bool => str_starts_with($path, 'vendor/'),
+    )))->toBeGreaterThan(100);
+});
+
+it('requires deterministic box settings for the verified manifest', function () {
+    $box = json_decode(file_get_contents(dirname(__DIR__, 2).'/box.json'), true, 512, JSON_THROW_ON_ERROR);
+
+    expect($box['dump-autoload'] ?? null)->toBeFalse();
+});
+
+it('matches the committed phar complete runtime to the project and dependency source', function () {
     $projectRoot = dirname(__DIR__, 2);
     $result = PharSourceIntegrityVerifier::verify(
         $projectRoot,
@@ -53,5 +108,14 @@ it('matches the committed phar app source to the project app source', function (
     );
 
     expect($result['issues'])->toBe([])
-        ->and($result['file_count'])->toBeGreaterThan(0);
+        ->and($result['file_count'])->toBeGreaterThan(7000)
+        ->and($result['categories'])->toMatchArray([
+            'app' => 31,
+            'bootstrap' => 2,
+            'config' => 2,
+            'launcher' => 2,
+            'composer' => 2,
+        ])
+        ->and($result['categories']['vendor'])->toBeGreaterThan(7000)
+        ->and($result['categories']['box-runtime'])->toBeGreaterThan(20);
 });

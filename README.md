@@ -130,9 +130,12 @@ Build the distributable PHAR and smoke-test it with:
 composer build
 builds/quickpay --version
 builds/quickpay list
+php scripts/verify-phar-source.php builds/quickpay dev
 ```
 
 `composer.json` exposes `builds/quickpay` as the Composer bin target. That built executable is intentionally tracked so a future Composer package archive contains the file its bin entry references. Other build artifacts remain ignored.
+
+The integrity verifier derives the complete expected archive from `box.json`, the checkout, `composer.json`, `composer.lock`, and the installed Box compiler. It checks the exact packaged file set across application, bootstrap, configuration, launcher, Composer, vendor, and Box runtime files, plus the executable stub. PHP is compared after Box's whitespace/comment compaction, JSON after formatting normalization, and all other files byte-for-byte. Box ignores hidden development metadata inside configured directories; no executable PHP or security metadata is otherwise excluded from verification.
 
 There is no self-update command. After publication, updates will use Composer, for example `composer global update peterchrjoergensen/quickpay-cli`.
 
@@ -141,7 +144,7 @@ There is no self-update command. After publication, updates will use Composer, f
 1. Choose and set the intended release version.
 2. Run `composer check`.
 3. Rebuild the tracked PHAR with that exact version, for example `php quickpay app:build quickpay --build-version=1.2.3 --no-interaction`; do not tag a release built as `dev`.
-4. Run `builds/quickpay --version` and `builds/quickpay list`, then review the diff and verify no credential/config file is included.
+4. Run `builds/quickpay --version`, `builds/quickpay list`, and `php scripts/verify-phar-source.php builds/quickpay 1.2.3`, then review the diff and verify no credential/config file is included.
 5. Commit the source and rebuilt `builds/quickpay`, tag the verified commit, then create the GitHub release and publish the matching Packagist package.
 
 Only after public publication will the agent reference skill be installable with:

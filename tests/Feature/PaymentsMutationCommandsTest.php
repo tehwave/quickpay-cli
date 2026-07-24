@@ -1,5 +1,6 @@
 <?php
 
+use App\Commands\PaymentsCancelCommand;
 use App\Commands\PaymentsCaptureCommand;
 use App\Commands\PaymentsRefundCommand;
 use App\Support\StdinTerminalDetector;
@@ -312,6 +313,61 @@ it('fails json mode safely when a successful payment mutation response is not va
         ->and($tester->getDisplay())->toBe('')
         ->and($tester->getErrorOutput())->toContain('valid JSON')
         ->not->toContain('<html>');
+});
+
+it('rejects non-object successful mutation json before writing stdout', function (
+    string $commandClass,
+    string $operation,
+    array $arguments,
+    string $body,
+) {
+    Http::fake([
+        'https://api.quickpay.net/payments/42' => Http::response(paymentFixture()),
+        "https://api.quickpay.net/payments/42/{$operation}" => Http::response($body),
+    ]);
+    $command = new $commandClass;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+
+    $status = $tester->execute([
+        ...$arguments,
+        '--yes' => true,
+        '--json' => true,
+    ], ['capture_stderr_separately' => true]);
+
+    expect($status)->toBe(1)
+        ->and($tester->getDisplay())->toBe('')
+        ->and($tester->getErrorOutput())->toContain('invalid payment mutation response');
+})->with([
+    'capture scalar' => [PaymentsCaptureCommand::class, 'capture', ['id' => '42', 'amount' => '1250'], '42'],
+    'capture list' => [PaymentsCaptureCommand::class, 'capture', ['id' => '42', 'amount' => '1250'], '[]'],
+    'capture null' => [PaymentsCaptureCommand::class, 'capture', ['id' => '42', 'amount' => '1250'], 'null'],
+    'refund scalar' => [PaymentsRefundCommand::class, 'refund', ['id' => '42', 'amount' => '300'], '42'],
+    'refund list' => [PaymentsRefundCommand::class, 'refund', ['id' => '42', 'amount' => '300'], '[]'],
+    'refund null' => [PaymentsRefundCommand::class, 'refund', ['id' => '42', 'amount' => '300'], 'null'],
+    'cancel scalar' => [PaymentsCancelCommand::class, 'cancel', ['id' => '42'], '42'],
+    'cancel list' => [PaymentsCancelCommand::class, 'cancel', ['id' => '42'], '[]'],
+    'cancel null' => [PaymentsCancelCommand::class, 'cancel', ['id' => '42'], 'null'],
+]);
+
+it('accepts an empty object as a successful mutation response in json mode', function () {
+    Http::fake([
+        'https://api.quickpay.net/payments/42' => Http::response(paymentFixture()),
+        'https://api.quickpay.net/payments/42/cancel' => Http::response('{}'),
+    ]);
+    $command = new PaymentsCancelCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+
+    $status = $tester->execute([
+        'id' => '42',
+        '--yes' => true,
+        '--json' => true,
+    ], ['capture_stderr_separately' => true]);
+
+    expect($status)->toBe(0)
+        ->and($tester->getDisplay())->toBe('{}')
+        ->and($tester->getErrorOutput())->toContain('Operation: cancel');
 });
 
 /** @return array<string, mixed> */

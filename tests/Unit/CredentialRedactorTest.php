@@ -83,3 +83,40 @@ it('redacts a credential whose every byte is percent encoded', function () {
         ->and(CredentialRedactor::containsSensitiveValue($lowercase, $apiKey))->toBeTrue()
         ->and($safe)->not->toContain($encoded)->not->toContain($lowercase);
 });
+
+it('redacts arbitrary partial percent encoding with mixed-case hex', function () {
+    $apiKey = 'Api-Key/9';
+    $partiallyEncoded = 'A%70i-%4bey%2F9';
+    $safe = CredentialRedactor::redact("credential={$partiallyEncoded}", $apiKey);
+
+    expect(CredentialRedactor::containsSensitiveValue($partiallyEncoded, $apiKey))->toBeTrue()
+        ->and(CredentialRedactor::containsSensitiveValue($safe, $apiKey))->toBeFalse()
+        ->and($safe)->toBe('credential=[redacted]');
+});
+
+it('redacts arbitrary partial percent encoding of the basic token', function () {
+    $apiKey = 'Basic-secret/9';
+    $token = base64_encode(':'.$apiKey);
+    $partiallyEncoded = '';
+
+    foreach (str_split($token) as $index => $byte) {
+        $partiallyEncoded .= match ($index % 3) {
+            0 => $byte,
+            1 => sprintf('%%%02X', ord($byte)),
+            default => strtolower(sprintf('%%%02X', ord($byte))),
+        };
+    }
+
+    $safe = CredentialRedactor::redact("basic={$partiallyEncoded}", $apiKey);
+
+    expect(CredentialRedactor::containsSensitiveValue($partiallyEncoded, $apiKey))->toBeTrue()
+        ->and(CredentialRedactor::containsSensitiveValue($safe, $apiKey))->toBeFalse()
+        ->and($safe)->toBe('basic=[redacted]');
+});
+
+it('does not corrupt unrelated or invalid percent sequences', function () {
+    $value = 'safe=%GZ%2&double=%2541pi-Key%252F9&url=https%3A%2F%2Fexample.test';
+
+    expect(CredentialRedactor::redact($value, 'Api-Key/9'))->toBe($value)
+        ->and(CredentialRedactor::containsSensitiveValue($value, 'Api-Key/9'))->toBeFalse();
+});

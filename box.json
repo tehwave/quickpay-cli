@@ -10,6 +10,9 @@
         "composer.json"
     ],
     "exclude-composer-files": false,
+    "dump-autoload": false,
+    "exclude-dev-files": false,
+    "check-requirements": true,
     "output": "quickpay.phar",
     "compression": "GZ",
     "compactors": [
