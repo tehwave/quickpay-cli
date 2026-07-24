@@ -12,7 +12,18 @@ final class CredentialRedactor
             return $value;
         }
 
-        return str_replace($sensitiveValues, self::replacement($sensitiveValues), $value);
+        $redacted = str_replace($sensitiveValues, self::replacement($sensitiveValues), $value);
+
+        while (self::containsAny($redacted, $sensitiveValues)) {
+            $previousLength = strlen($redacted);
+            $redacted = str_replace($sensitiveValues, '', $redacted);
+
+            if (strlen($redacted) >= $previousLength) {
+                return '';
+            }
+        }
+
+        return $redacted;
     }
 
     public static function containsSensitiveValue(string $value, string $apiKey): bool
