@@ -103,11 +103,36 @@ final readonly class QuickpayClient
 
     /**
      * @param  array<string, mixed>  $query
+     * @param  array<string, string>  $headers
+     */
+    public function raw(
+        string $method,
+        string $path,
+        array $query = [],
+        mixed $data = null,
+        array $headers = [],
+        bool $hasData = false,
+    ): QuickpayResponse {
+        if (parse_url($path, PHP_URL_SCHEME) !== null || str_starts_with($path, '//')) {
+            throw new InvalidArgumentException('Quickpay request paths must be relative.');
+        }
+
+        return $this->send($method, '/'.ltrim($path, '/'), $query, $data, $headers, $hasData);
+    }
+
+    /**
+     * @param  array<string, mixed>  $query
      * @param  array<string, mixed>  $data
      * @param  array<string, string>  $headers
      */
-    private function send(string $method, string $url, array $query = [], array $data = [], array $headers = []): QuickpayResponse
-    {
+    private function send(
+        string $method,
+        string $url,
+        array $query = [],
+        mixed $data = [],
+        array $headers = [],
+        bool $hasData = false,
+    ): QuickpayResponse {
         $request = $this->pendingRequest($headers);
         $options = [];
 
@@ -115,7 +140,7 @@ final readonly class QuickpayClient
             $options['query'] = $query;
         }
 
-        if ($data !== []) {
+        if ($data !== [] || $hasData) {
             $options['json'] = $data;
         }
 

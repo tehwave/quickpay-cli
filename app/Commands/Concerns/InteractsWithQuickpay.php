@@ -73,4 +73,21 @@ trait InteractsWithQuickpay
 
         return $integer;
     }
+
+    protected function nonNegativeNumber(mixed $value, string $name): int|float
+    {
+        if ((! is_string($value) && ! is_int($value) && ! is_float($value))
+            || preg_match('/\A(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)\z/D', (string) $value) !== 1
+            || ! is_numeric($value)) {
+            throw new InvalidArgumentException("{$name} must be a non-negative number.");
+        }
+
+        $number = str_contains((string) $value, '.') ? (float) $value : (int) $value;
+
+        if (! is_finite((float) $number) || $number < 0) {
+            throw new InvalidArgumentException("{$name} must be a non-negative number.");
+        }
+
+        return $number;
+    }
 }
