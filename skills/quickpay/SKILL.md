@@ -37,7 +37,9 @@ For a refund or cancellation, use the same inspect → verify → explicit autho
 ## Commands
 
 ```text
-quickpay login | auth | logout
+quickpay login
+quickpay auth
+quickpay logout
 quickpay payments:create <order-id> [currency=DKK] [--field=key=value]... [--json]
 quickpay payments:list [--accepted] [--state=value] [--order-id=value]
   [--created-after=value] [--created-before=value] [--page-size=20]

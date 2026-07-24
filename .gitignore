@@ -1,6 +1,7 @@
 /vendor
 /builds/*
 !/builds/quickpay
+/builds/quickpay/
 /.idea
 /.vscode
 /.vagrant
