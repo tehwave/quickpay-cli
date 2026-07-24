@@ -8,6 +8,8 @@ use App\Credentials\CredentialRedactor;
 use App\Credentials\CredentialStore;
 use App\Quickpay\QuickpayClient;
 use App\Quickpay\QuickpayClientFactory;
+use App\Support\ResponseBodySanitizer;
+use App\Support\StdinTerminalDetector;
 use Illuminate\Console\Command;
 use Illuminate\Console\OutputStyle;
 use InvalidArgumentException;
@@ -18,9 +20,12 @@ abstract class PaymentMutationCommand extends Command
     use InteractsWithQuickpay;
     use WritesPaymentOutput;
 
-    public function handle(CredentialStore $credentials, QuickpayClientFactory $clients): int
-    {
-        return $this->withQuickpay($credentials, $clients, function (QuickpayClient $client, string $apiKey): int {
+    public function handle(
+        CredentialStore $credentials,
+        QuickpayClientFactory $clients,
+        StdinTerminalDetector $stdin,
+    ): int {
+        return $this->withQuickpay($credentials, $clients, function (QuickpayClient $client, string $apiKey) use ($stdin): int {
             $id = $this->positiveInteger($this->argument('id'), 'id');
             $body = $this->mutationBody();
             $headers = $this->callbackHeaders();
@@ -42,7 +47,7 @@ abstract class PaymentMutationCommand extends Command
             );
 
             if (! $this->option('yes')) {
-                if (! $this->input->isInteractive()) {
+                if (! $this->input->isInteractive() || ! $stdin->isTty()) {
                     return $this->failure('Non-interactive payment mutations require --yes.');
                 }
 
@@ -59,17 +64,21 @@ abstract class PaymentMutationCommand extends Command
                 return $this->responseFailure($response, $apiKey);
             }
 
+            $safeJson = ResponseBodySanitizer::json($response->rawBody, $apiKey);
+
             if ($this->option('json')) {
-                $this->getOutput()->write(CredentialRedactor::redact($response->rawBody, $apiKey));
+                $this->getOutput()->write($safeJson);
 
                 return self::SUCCESS;
             }
 
-            if (! is_array($response->json) || array_is_list($response->json)) {
+            $payment = json_decode($safeJson, true, flags: JSON_THROW_ON_ERROR);
+
+            if (! is_array($payment) || array_is_list($payment)) {
                 throw new InvalidArgumentException('Quickpay returned an invalid payment mutation response.');
             }
 
-            $this->writePaymentDetails($response->json);
+            $this->writePaymentDetails($payment);
 
             return self::SUCCESS;
         });

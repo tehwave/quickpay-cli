@@ -10,6 +10,8 @@ use App\Quickpay\QuickpayClientFactory;
 use App\Support\KeyValueParser;
 use App\Support\RawApiHeaderParser;
 use App\Support\RawApiPath;
+use App\Support\ResponseBodySanitizer;
+use App\Support\StdinTerminalDetector;
 use Illuminate\Console\Command;
 use Illuminate\Console\OutputStyle;
 use InvalidArgumentException;
@@ -32,9 +34,12 @@ class ApiCommand extends Command
 
     protected $description = 'Send a request to the Quickpay API';
 
-    public function handle(CredentialStore $credentials, QuickpayClientFactory $clients): int
-    {
-        return $this->withQuickpay($credentials, $clients, function (QuickpayClient $client, string $apiKey): int {
+    public function handle(
+        CredentialStore $credentials,
+        QuickpayClientFactory $clients,
+        StdinTerminalDetector $stdin,
+    ): int {
+        return $this->withQuickpay($credentials, $clients, function (QuickpayClient $client, string $apiKey) use ($stdin): int {
             $method = strtoupper((string) $this->argument('method'));
 
             if (! in_array($method, self::METHODS, true)) {
@@ -49,10 +54,13 @@ class ApiCommand extends Command
             $mutation = $method !== 'GET';
 
             if ($mutation) {
-                $this->writeSafetyLine("Request: {$method} {$target['path']}");
+                $this->writeSafetyLine(CredentialRedactor::redact(
+                    "Request: {$method} {$target['path']}",
+                    $apiKey,
+                ));
 
                 if (! $this->option('yes')) {
-                    if (! $this->input->isInteractive()) {
+                    if (! $this->input->isInteractive() || ! $stdin->isTty()) {
                         return $this->failure('Non-interactive API mutations require --yes.');
                     }
 
@@ -71,23 +79,24 @@ class ApiCommand extends Command
             }
 
             if ($this->option('json')) {
-                $this->getOutput()->write(CredentialRedactor::redact($response->rawBody, $apiKey));
+                $this->getOutput()->write(ResponseBodySanitizer::json($response->rawBody, $apiKey));
 
                 return self::SUCCESS;
             }
 
-            if ($response->json !== null) {
+            if (json_validate($response->rawBody)) {
+                $safeJson = ResponseBodySanitizer::json($response->rawBody, $apiKey);
                 $json = json_encode(
-                    $response->json,
+                    json_decode($safeJson, flags: JSON_THROW_ON_ERROR),
                     JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR,
                 );
-                $this->getOutput()->writeln(CredentialRedactor::redact($json, $apiKey), OutputInterface::OUTPUT_RAW);
+                $this->getOutput()->writeln($json, OutputInterface::OUTPUT_RAW);
 
                 return self::SUCCESS;
             }
 
             $this->getOutput()->writeln(
-                CredentialRedactor::redact($response->rawBody, $apiKey),
+                ResponseBodySanitizer::terminalText($response->rawBody, $apiKey),
                 OutputInterface::OUTPUT_RAW,
             );
 

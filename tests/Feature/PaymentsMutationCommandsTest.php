@@ -2,6 +2,7 @@
 
 use App\Commands\PaymentsCaptureCommand;
 use App\Commands\PaymentsRefundCommand;
+use App\Support\StdinTerminalDetector;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -9,6 +10,13 @@ use Symfony\Component\Console\Tester\CommandTester;
 beforeEach(function () {
     $this->originalApiKey = getenv('QUICKPAY_API_KEY');
     putenv('QUICKPAY_API_KEY=mutation-secret');
+    app()->instance(StdinTerminalDetector::class, new class implements StdinTerminalDetector
+    {
+        public function isTty(): bool
+        {
+            return true;
+        }
+    });
 });
 
 afterEach(function () {
@@ -97,6 +105,32 @@ it('requires yes for non-interactive payment mutations after showing the fetched
         ->toContain('Payment ID: 42')
         ->toContain('--yes');
     Http::assertSentCount(1);
+});
+
+it('does not accept piped confirmation for a payment mutation when stdin is not a tty', function () {
+    Http::fake(['https://api.quickpay.net/payments/42' => Http::response(paymentFixture())]);
+    app()->instance(StdinTerminalDetector::class, new class implements StdinTerminalDetector
+    {
+        public function isTty(): bool
+        {
+            return false;
+        }
+    });
+    $command = new PaymentsCaptureCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+    $tester->setInputs(['yes']);
+
+    $status = $tester->execute([
+        'id' => '42',
+        'amount' => '1250',
+    ], ['interactive' => true, 'capture_stderr_separately' => true]);
+
+    expect($status)->toBe(1)
+        ->and($tester->getDisplay())->toContain('Payment ID: 42')->not->toContain('Continue?')
+        ->and($tester->getErrorOutput())->toContain('--yes');
+    Http::assertSentCount(1);
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET');
 });
 
 it('validates payment mutation inputs before fetching the payment', function (string $command, array $arguments, string $message) {
@@ -199,6 +233,28 @@ it('renders mutation api errors on stderr without exposing the credential', func
         ->toContain('amount: Too high')
         ->toContain('qp_status_code: 40000')
         ->not->toContain('mutation-secret');
+});
+
+it('fails json mode safely when a successful payment mutation response is not valid json', function () {
+    Http::fake([
+        'https://api.quickpay.net/payments/42' => Http::response(paymentFixture()),
+        'https://api.quickpay.net/payments/42/capture' => Http::response('<html>captured</html>', 200, ['Content-Type' => 'text/html']),
+    ]);
+    $command = new PaymentsCaptureCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+
+    $status = $tester->execute([
+        'id' => '42',
+        'amount' => '1250',
+        '--yes' => true,
+        '--json' => true,
+    ], ['capture_stderr_separately' => true]);
+
+    expect($status)->toBe(1)
+        ->and($tester->getDisplay())->toBe('')
+        ->and($tester->getErrorOutput())->toContain('valid JSON')
+        ->not->toContain('<html>');
 });
 
 /** @return array<string, mixed> */

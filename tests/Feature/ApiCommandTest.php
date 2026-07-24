@@ -1,6 +1,7 @@
 <?php
 
 use App\Commands\ApiCommand;
+use App\Support\StdinTerminalDetector;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -8,6 +9,13 @@ use Symfony\Component\Console\Tester\CommandTester;
 beforeEach(function () {
     $this->originalApiKey = getenv('QUICKPAY_API_KEY');
     putenv('QUICKPAY_API_KEY=raw-api-secret');
+    app()->instance(StdinTerminalDetector::class, new class implements StdinTerminalDetector
+    {
+        public function isTty(): bool
+        {
+            return true;
+        }
+    });
 });
 
 afterEach(function () {
@@ -116,6 +124,51 @@ it('requires yes for non-interactive raw mutations', function () {
     Http::assertNothingSent();
 });
 
+it('does not accept piped confirmation when symfony input is interactive but stdin is not a tty', function () {
+    Http::fake();
+    app()->instance(StdinTerminalDetector::class, new class implements StdinTerminalDetector
+    {
+        public function isTty(): bool
+        {
+            return false;
+        }
+    });
+    $command = new ApiCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+    $tester->setInputs(['yes']);
+
+    $status = $tester->execute([
+        'method' => 'POST',
+        'path' => '/payments',
+    ], ['interactive' => true, 'capture_stderr_separately' => true]);
+
+    expect($status)->toBe(1)
+        ->and($tester->getDisplay())->toContain('Request: POST /payments')
+        ->not->toContain('Continue?')
+        ->and($tester->getErrorOutput())->toContain('--yes');
+    Http::assertNothingSent();
+});
+
+it('redacts the active credential from raw mutation safety context', function () {
+    Http::fake(['https://api.quickpay.net/resources/raw-api-secret' => Http::response(['ok' => true])]);
+    $command = new ApiCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+
+    $status = $tester->execute([
+        'method' => 'DELETE',
+        'path' => '/resources/raw-api-secret',
+        '--yes' => true,
+        '--json' => true,
+    ], ['capture_stderr_separately' => true]);
+
+    expect($status)->toBe(0)
+        ->and($tester->getDisplay())->toBe('{"ok":true}')
+        ->and($tester->getErrorOutput())->toContain('Request: DELETE /resources/[redacted]')
+        ->not->toContain('raw-api-secret');
+});
+
 it('validates raw request inputs before making a request', function (array $arguments, string $message) {
     Http::fake();
 
@@ -158,6 +211,62 @@ it('pretty prints arbitrary json and safely writes successful non-json bodies', 
     $this->artisan('api', ['method' => 'GET', 'path' => '/second'])
         ->expectsOutput('<not-a-style-tag>')
         ->assertExitCode(0);
+});
+
+it('sanitizes terminal controls and credentials in successful non-json bodies', function () {
+    $body = "line one\nline two\r\nraw-api-secret\t\e]0;owned\x07\rend\x9d";
+    Http::fake(['https://api.quickpay.net/text' => Http::response($body, 200, ['Content-Type' => 'text/plain'])]);
+    $command = new ApiCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+
+    $status = $tester->execute(['method' => 'GET', 'path' => '/text']);
+    $display = $tester->getDisplay();
+
+    expect($status)->toBe(0)
+        ->and($display)->toContain("line one\nline two\r\n[redacted]")
+        ->toContain('\\x09\\x1B]0;owned\\x07\\x0Dend\\x9D')
+        ->not->toContain("\e")
+        ->not->toContain('raw-api-secret');
+});
+
+it('fails json mode safely when a successful raw response is not valid json', function () {
+    Http::fake(['https://api.quickpay.net/html' => Http::response('<html>ok</html>', 200, ['Content-Type' => 'text/html'])]);
+    $command = new ApiCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+
+    $status = $tester->execute([
+        'method' => 'GET',
+        'path' => '/html',
+        '--json' => true,
+    ], ['capture_stderr_separately' => true]);
+
+    expect($status)->toBe(1)
+        ->and($tester->getDisplay())->toBe('')
+        ->and($tester->getErrorOutput())->toContain('valid JSON')
+        ->not->toContain('<html>');
+});
+
+it('semantically redacts escaped credentials while keeping json output valid', function () {
+    putenv('QUICKPAY_API_KEY=a/b');
+    $raw = '{"escaped":"a\\/b","safe":"unchanged"}';
+    Http::fake(['https://api.quickpay.net/ping' => Http::response($raw)]);
+    $command = new ApiCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+
+    $status = $tester->execute([
+        'method' => 'GET',
+        'path' => '/ping',
+        '--json' => true,
+    ], ['capture_stderr_separately' => true]);
+    $json = $tester->getDisplay();
+
+    expect($status)->toBe(0)
+        ->and(json_validate($json))->toBeTrue()
+        ->and(json_decode($json, true))->toBe(['escaped' => '[redacted]', 'safe' => 'unchanged'])
+        ->and($json)->not->toContain('a/b')->not->toContain('a\\/b');
 });
 
 it('renders structured api errors to stderr with credential redaction', function () {
