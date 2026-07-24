@@ -136,6 +136,43 @@ it('detects pagination cycles before repeating a request', function () {
     Http::assertSentCount(2);
 });
 
+it('detects a link back to the initial request before requesting it again', function () {
+    Http::fake([
+        'https://api.quickpay.net/payments?accepted=true&state=processed&page_size=20' => Http::response(
+            [['id' => 1]],
+            200,
+            ['Link' => '<https://api.quickpay.net/payments?page_key=second>; rel=next'],
+        ),
+        'https://api.quickpay.net/payments?page_key=second' => Http::response(
+            [['id' => 2]],
+            200,
+            ['Link' => '<https://api.quickpay.net/payments?page_size=20&state=processed&accepted=true>; rel=next'],
+        ),
+        '*' => Http::response([['id' => 99]]),
+    ]);
+
+    $this->artisan('payments:list', [
+        '--accepted' => true,
+        '--state' => 'processed',
+        '--all' => true,
+    ])->expectsOutputToContain('pagination cycle')
+        ->assertExitCode(1);
+
+    $initialRequests = Http::recorded(function (Request $request): bool {
+        parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+        return parse_url($request->url(), PHP_URL_PATH) === '/payments'
+            && $query === [
+                'accepted' => 'true',
+                'state' => 'processed',
+                'page_size' => '20',
+            ];
+    });
+
+    expect($initialRequests)->toHaveCount(1);
+    Http::assertSentCount(2);
+});
+
 it('rejects a hostile next link before contacting its host', function () {
     Http::fake(['*' => Http::response(
         [['id' => 1]],

@@ -9,6 +9,7 @@ use App\Quickpay\QuickpayClient;
 use App\Quickpay\QuickpayClientFactory;
 use App\Quickpay\QuickpayResponse;
 use App\Support\LinkHeaderParser;
+use App\Support\PaginationTargetCanonicalizer;
 use Illuminate\Console\Command;
 use InvalidArgumentException;
 
@@ -62,7 +63,7 @@ class PaymentsListCommand extends Command
 
             $payments = $this->paymentList($response);
             $pageCount = 1;
-            $seen = [];
+            $seen = [PaginationTargetCanonicalizer::fromQuery('/payments', $query) => true];
             $next = LinkHeaderParser::next($response->header('Link'));
 
             while ($next !== null) {
@@ -70,11 +71,13 @@ class PaymentsListCommand extends Command
                     throw new InvalidArgumentException("Pagination exceeded the configured maximum of {$maxPages} pages.");
                 }
 
-                if (isset($seen[$next])) {
+                $canonicalNext = PaginationTargetCanonicalizer::canonical($next);
+
+                if (isset($seen[$canonicalNext])) {
                     throw new InvalidArgumentException('Quickpay returned a pagination cycle.');
                 }
 
-                $seen[$next] = true;
+                $seen[$canonicalNext] = true;
                 $response = $client->get($next);
                 $pageCount++;
 
