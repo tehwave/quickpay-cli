@@ -3,7 +3,6 @@
 namespace App\Commands;
 
 use App\Commands\Concerns\InteractsWithQuickpay;
-use App\Credentials\CredentialRedactor;
 use App\Credentials\CredentialStore;
 use App\Quickpay\QuickpayClient;
 use App\Quickpay\QuickpayClientFactory;
@@ -54,10 +53,7 @@ class ApiCommand extends Command
             $mutation = $method !== 'GET';
 
             if ($mutation) {
-                $this->writeSafetyLine(CredentialRedactor::redact(
-                    "Request: {$method} {$target['path']}",
-                    $apiKey,
-                ));
+                $this->writeSafetyLine("Quickpay API request: {$method}");
 
                 if (! $this->option('yes')) {
                     if (! $this->input->isInteractive() || ! $stdin->isTty()) {

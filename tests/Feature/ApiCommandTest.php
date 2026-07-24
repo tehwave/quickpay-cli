@@ -69,7 +69,8 @@ it('confirms raw mutations and keeps json stdout machine readable', function () 
     expect($status)->toBe(0)
         ->and($tester->getDisplay())->toBe($raw)
         ->and($tester->getErrorOutput())
-        ->toContain('Request: POST /payments/42/capture')
+        ->toContain('Quickpay API request: POST')
+        ->not->toContain('/payments/42/capture')
         ->toContain('Continue?');
 
     Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
@@ -119,7 +120,8 @@ it('requires yes for non-interactive raw mutations', function () {
     expect($status)->toBe(1)
         ->and($tester->getDisplay())->toBe('')
         ->and($tester->getErrorOutput())
-        ->toContain('Request: PUT /payments/42')
+        ->toContain('Quickpay API request: PUT')
+        ->not->toContain('/payments/42')
         ->toContain('--yes');
     Http::assertNothingSent();
 });
@@ -144,29 +146,34 @@ it('does not accept piped confirmation when symfony input is interactive but std
     ], ['interactive' => true, 'capture_stderr_separately' => true]);
 
     expect($status)->toBe(1)
-        ->and($tester->getDisplay())->toContain('Request: POST /payments')
+        ->and($tester->getDisplay())->toContain('Quickpay API request: POST')
+        ->not->toContain('/payments')
         ->not->toContain('Continue?')
         ->and($tester->getErrorOutput())->toContain('--yes');
     Http::assertNothingSent();
 });
 
-it('redacts the active credential from raw mutation safety context', function () {
-    Http::fake(['https://api.quickpay.net/resources/raw-api-secret' => Http::response(['ok' => true])]);
+it('never includes a raw mutation path or its percent-encoded credential in safety context', function () {
+    putenv('QUICKPAY_API_KEY=encoded-secret');
+    $encoded = '%65%6E%63%6F%64%65%64%2D%73%65%63%72%65%74';
+    Http::fake(['https://api.quickpay.net/resources/*' => Http::response(['ok' => true])]);
     $command = new ApiCommand;
     $command->setLaravel(app());
     $tester = new CommandTester($command);
 
     $status = $tester->execute([
         'method' => 'DELETE',
-        'path' => '/resources/raw-api-secret',
+        'path' => '/resources/'.$encoded,
         '--yes' => true,
         '--json' => true,
     ], ['capture_stderr_separately' => true]);
 
     expect($status)->toBe(0)
         ->and($tester->getDisplay())->toBe('{"ok":true}')
-        ->and($tester->getErrorOutput())->toContain('Request: DELETE /resources/[redacted]')
-        ->not->toContain('raw-api-secret');
+        ->and($tester->getErrorOutput())->toContain('Quickpay API request: DELETE')
+        ->not->toContain('/resources/')
+        ->not->toContain('encoded-secret')
+        ->not->toContain($encoded);
 });
 
 it('validates raw request inputs before making a request', function (array $arguments, string $message) {

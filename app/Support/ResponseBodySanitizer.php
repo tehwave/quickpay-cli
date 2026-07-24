@@ -19,14 +19,30 @@ final class ResponseBodySanitizer
 
         $changed = false;
         $safe = self::redactJsonValue($decoded, $apiKey, $changed);
+        $rawExposesCredential = CredentialRedactor::redact($body, $apiKey) !== $body;
 
-        if (! $changed) {
+        if (! $changed && ! $rawExposesCredential) {
             return $body;
         }
 
+        $encoded = self::encodeJson($safe);
+
+        if (CredentialRedactor::redact($encoded, $apiKey) !== $encoded) {
+            $encoded = self::encodeJson('[redacted]');
+        }
+
+        if (CredentialRedactor::redact($encoded, $apiKey) !== $encoded) {
+            throw new InvalidArgumentException('Quickpay returned JSON that could not be rendered without exposing credentials.');
+        }
+
+        return $encoded;
+    }
+
+    private static function encodeJson(mixed $value): string
+    {
         try {
             return json_encode(
-                $safe,
+                $value,
                 JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR,
             );
         } catch (JsonException) {
@@ -116,7 +132,7 @@ final class ResponseBodySanitizer
         }
 
         if (is_int($value) || is_float($value)) {
-            $rendered = (string) $value;
+            $rendered = self::encodeJson($value);
             $safe = CredentialRedactor::redact($rendered, $apiKey);
 
             if ($safe !== $rendered) {
@@ -133,6 +149,16 @@ final class ResponseBodySanitizer
             $safe = CredentialRedactor::redact($rendered, $apiKey);
 
             if ($safe !== $rendered) {
+                $changed = true;
+
+                return $safe;
+            }
+        }
+
+        if ($value === null) {
+            $safe = CredentialRedactor::redact('null', $apiKey);
+
+            if ($safe !== 'null') {
                 $changed = true;
 
                 return $safe;

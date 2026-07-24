@@ -22,6 +22,18 @@ it('recursively redacts credentials in decoded object keys and scalar values and
         ]);
 });
 
+it('never emits null or numeric credential lexemes from valid json', function (string $raw, string $apiKey, mixed $expected) {
+    $safe = ResponseBodySanitizer::json($raw, $apiKey);
+
+    expect(json_validate($safe))->toBeTrue()
+        ->and($safe)->not->toContain($apiKey)
+        ->and(json_decode($safe))->toBe($expected);
+})->with([
+    'null scalar' => ['null', 'null', '[redacted]'],
+    'float scalar' => ['1.0', '1.0', '[redacted]'],
+    'exponent raw lexeme' => ['1e3', '1e3', 1000.0],
+]);
+
 it('rejects invalid json instead of writing it in json mode', function () {
     expect(fn () => ResponseBodySanitizer::json('<html>not json</html>', 'secret'))
         ->toThrow(InvalidArgumentException::class, 'valid JSON');
