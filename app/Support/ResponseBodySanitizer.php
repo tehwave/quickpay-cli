@@ -19,7 +19,7 @@ final class ResponseBodySanitizer
 
         $changed = false;
         $safe = self::redactJsonValue($decoded, $apiKey, $changed);
-        $rawExposesCredential = CredentialRedactor::redact($body, $apiKey) !== $body;
+        $rawExposesCredential = CredentialRedactor::containsSensitiveValue($body, $apiKey);
 
         if (! $changed && ! $rawExposesCredential) {
             return $body;
@@ -27,11 +27,11 @@ final class ResponseBodySanitizer
 
         $encoded = self::encodeJson($safe);
 
-        if (CredentialRedactor::redact($encoded, $apiKey) !== $encoded) {
-            $encoded = self::encodeJson('[redacted]');
+        if (CredentialRedactor::containsSensitiveValue($encoded, $apiKey)) {
+            $encoded = self::safeFallbackJson($apiKey);
         }
 
-        if (CredentialRedactor::redact($encoded, $apiKey) !== $encoded) {
+        if (CredentialRedactor::containsSensitiveValue($encoded, $apiKey)) {
             throw new InvalidArgumentException('Quickpay returned JSON that could not be rendered without exposing credentials.');
         }
 
@@ -48,6 +48,19 @@ final class ResponseBodySanitizer
         } catch (JsonException) {
             throw new InvalidArgumentException('Quickpay returned JSON that could not be rendered safely.');
         }
+    }
+
+    private static function safeFallbackJson(string $apiKey): string
+    {
+        foreach ([null, false, 0, [], new stdClass] as $fallback) {
+            $encoded = self::encodeJson($fallback);
+
+            if (! CredentialRedactor::containsSensitiveValue($encoded, $apiKey)) {
+                return $encoded;
+            }
+        }
+
+        throw new InvalidArgumentException('Quickpay returned JSON that could not be rendered without exposing credentials.');
     }
 
     public static function terminalText(string $body, string $apiKey): string
@@ -106,8 +119,8 @@ final class ResponseBodySanitizer
             $safe = new stdClass;
 
             foreach (get_object_vars($value) as $key => $item) {
+                $changed = $changed || CredentialRedactor::containsSensitiveValue($key, $apiKey);
                 $safeKey = CredentialRedactor::redact($key, $apiKey);
-                $changed = $changed || $safeKey !== $key;
                 $safe->{$safeKey} = self::redactJsonValue($item, $apiKey, $changed);
             }
 
@@ -125,20 +138,17 @@ final class ResponseBodySanitizer
         }
 
         if (is_string($value)) {
-            $safe = CredentialRedactor::redact($value, $apiKey);
-            $changed = $changed || $safe !== $value;
+            $changed = $changed || CredentialRedactor::containsSensitiveValue($value, $apiKey);
 
-            return $safe;
+            return CredentialRedactor::redact($value, $apiKey);
         }
 
         if (is_int($value) || is_float($value)) {
             $rendered = self::encodeJson($value);
-            $safe = CredentialRedactor::redact($rendered, $apiKey);
-
-            if ($safe !== $rendered) {
+            if (CredentialRedactor::containsSensitiveValue($rendered, $apiKey)) {
                 $changed = true;
 
-                return $safe;
+                return CredentialRedactor::redact($rendered, $apiKey);
             }
 
             return $value;
@@ -146,22 +156,18 @@ final class ResponseBodySanitizer
 
         if (is_bool($value)) {
             $rendered = $value ? 'true' : 'false';
-            $safe = CredentialRedactor::redact($rendered, $apiKey);
-
-            if ($safe !== $rendered) {
+            if (CredentialRedactor::containsSensitiveValue($rendered, $apiKey)) {
                 $changed = true;
 
-                return $safe;
+                return CredentialRedactor::redact($rendered, $apiKey);
             }
         }
 
         if ($value === null) {
-            $safe = CredentialRedactor::redact('null', $apiKey);
-
-            if ($safe !== 'null') {
+            if (CredentialRedactor::containsSensitiveValue('null', $apiKey)) {
                 $changed = true;
 
-                return $safe;
+                return CredentialRedactor::redact('null', $apiKey);
             }
         }
 

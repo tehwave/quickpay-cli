@@ -302,6 +302,29 @@ it('renders structured api errors to stderr with credential redaction', function
         ->not->toContain('raw-api-secret');
 });
 
+it('redacts a reflected basic-auth token from raw api errors', function () {
+    $token = base64_encode(':raw-api-secret');
+    Http::fake(['https://api.quickpay.net/payments/42' => Http::response([
+        'message' => 'Rejected '.$token,
+    ], 401)]);
+    $command = new ApiCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+
+    $status = $tester->execute([
+        'method' => 'POST',
+        'path' => '/payments/42',
+        '--yes' => true,
+        '--json' => true,
+    ], ['capture_stderr_separately' => true]);
+
+    expect($status)->toBe(1)
+        ->and($tester->getDisplay())->toBe('')
+        ->and($tester->getErrorOutput())->toContain('Rejected [redacted]')
+        ->not->toContain($token)
+        ->not->toContain('raw-api-secret');
+});
+
 it('redacts a credential reflected in a successful raw response', function () {
     Http::fake(['https://api.quickpay.net/ping' => Http::response('{"echo":"raw-api-secret"}')]);
     $command = new ApiCommand;

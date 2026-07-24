@@ -45,3 +45,17 @@ it('preserves printable text and newlines while visibly encoding unsafe terminal
     expect(ResponseBodySanitizer::terminalText($input, 'secret'))
         ->toBe("hello\nworld\r\n[redacted]\\x09\\x1B]0;owned\\x07\\x0Dlone\\x9D");
 });
+
+it('removes colliding raw credentials and basic-auth tokens from valid json and terminal text', function () {
+    $apiKey = '[redacted]';
+    $token = base64_encode(':'.$apiKey);
+    $json = ResponseBodySanitizer::json(
+        json_encode(['raw' => $apiKey, 'basic' => $token], JSON_THROW_ON_ERROR),
+        $apiKey,
+    );
+    $text = ResponseBodySanitizer::terminalText("raw={$apiKey}; basic={$token}", $apiKey);
+
+    expect(json_validate($json))->toBeTrue()
+        ->and($json)->not->toContain($apiKey)->not->toContain($token)
+        ->and($text)->not->toContain($apiKey)->not->toContain($token);
+});
