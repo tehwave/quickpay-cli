@@ -592,22 +592,6 @@ final class PharSourceIntegrityVerifier
             $contents = self::normalizeComposerInstalledRootIdentity($contents);
         }
 
-        if ($path === 'vendor/composer/autoload_classmap.php') {
-            $contents = preg_replace(
-                '~^\'App\\\\\\\\[^\'\r\n]*\' => \$baseDir \. \'/app/[^\'\r\n]+\',\r?\n~m',
-                '',
-                $contents,
-            ) ?? $contents;
-        }
-
-        if ($path === 'vendor/composer/autoload_static.php') {
-            $contents = preg_replace(
-                "~^'App\\\\\\\\[^'\\r\\n]*' => __DIR__ \\. '/\\.\\./\\.\\.' \\. '/app/[^'\\r\\n]+',\\r?\\n~m",
-                '',
-                $contents,
-            ) ?? $contents;
-        }
-
         if (in_array($path, [
             'vendor/autoload.php',
             'vendor/composer/autoload_real.php',

@@ -92,7 +92,7 @@ it('detects drift across every packaged project and dependency category', functi
         ->toContain('Byte mismatch: composer.json');
 });
 
-it('normalizes only volatile composer root identity and root classmap entries', function () {
+it('normalizes only volatile composer root identity and initializer suffixes', function () {
     $expectedInstalled = <<<'PHP'
 <?php return array(
 'root' => array(
@@ -121,11 +121,6 @@ PHP;
 'Vendor\\Safe' => $vendorDir . '/vendor/safe.php',
 );
 PHP;
-    $volatileClassmap = str_replace(
-        "'App\\\\Commands\\\\ApiCommand' => \$baseDir . '/app/Commands/ApiCommand.php',",
-        "'App\\\\Commands\\\\OtherCommand' => \$baseDir . '/app/Commands/OtherCommand.php',",
-        $expectedClassmap,
-    );
     $expectedStatic = <<<'PHP'
 <?php class ComposerStaticInitaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa {
 'App\\Commands\\ApiCommand' => __DIR__ . '/../..' . '/app/Commands/ApiCommand.php',
@@ -133,8 +128,8 @@ PHP;
 }
 PHP;
     $volatileStatic = str_replace(
-        [str_repeat('a', 32), "'App\\\\Commands\\\\ApiCommand' => __DIR__ . '/../..' . '/app/Commands/ApiCommand.php',"],
-        [str_repeat('b', 32), "'App\\\\Commands\\\\OtherCommand' => __DIR__ . '/../..' . '/app/Commands/OtherCommand.php',"],
+        str_repeat('a', 32),
+        str_repeat('b', 32),
         $expectedStatic,
     );
 
@@ -146,13 +141,52 @@ PHP;
         ],
         [
             'vendor/composer/installed.php' => $volatileInstalled,
-            'vendor/composer/autoload_classmap.php' => $volatileClassmap,
+            'vendor/composer/autoload_classmap.php' => $expectedClassmap,
             'vendor/composer/autoload_static.php' => $volatileStatic,
         ],
     );
 
     expect($issues)->toBe([]);
 });
+
+it('detects changed missing and extra root app classmap entries', function (string $path, string $change) {
+    $isStatic = $path === 'vendor/composer/autoload_static.php';
+    $entry = static fn (string $class, string $file): string => $isStatic
+        ? "'App\\\\Commands\\\\{$class}' => __DIR__ . '/../..' . '/app/Commands/{$file}.php',"
+        : "'App\\\\Commands\\\\{$class}' => \$baseDir . '/app/Commands/{$file}.php',";
+    $expectedEntry = $entry('ApiCommand', 'ApiCommand');
+    $otherEntry = $entry('OtherCommand', 'OtherCommand');
+    $actualEntries = match ($change) {
+        'changed' => [$otherEntry],
+        'missing' => [],
+        'extra' => [$expectedEntry, $otherEntry],
+    };
+    $render = static function (array $entries) use ($isStatic): string {
+        $header = $isStatic
+            ? '<?php class ComposerStaticInit'.str_repeat('a', 32)." {\n"
+            : "<?php return array(\n";
+        $footer = $isStatic ? "}\n" : ");\n";
+
+        return $header.implode("\n", [
+            ...$entries,
+            $isStatic
+                ? "'Vendor\\\\Safe' => __DIR__ . '/..' . '/vendor/safe.php',"
+                : "'Vendor\\\\Safe' => \$vendorDir . '/vendor/safe.php',",
+        ])."\n".$footer;
+    };
+
+    expect(PharSourceIntegrityVerifier::compareContents(
+        [$path => $render([$expectedEntry])],
+        [$path => $render($actualEntries)],
+    ))->toContain("Byte mismatch: {$path}");
+})->with([
+    'classmap changed' => ['vendor/composer/autoload_classmap.php', 'changed'],
+    'classmap missing' => ['vendor/composer/autoload_classmap.php', 'missing'],
+    'classmap extra' => ['vendor/composer/autoload_classmap.php', 'extra'],
+    'static classmap changed' => ['vendor/composer/autoload_static.php', 'changed'],
+    'static classmap missing' => ['vendor/composer/autoload_static.php', 'missing'],
+    'static classmap extra' => ['vendor/composer/autoload_static.php', 'extra'],
+]);
 
 it('still detects dependency composer metadata reference and autoload drift', function () {
     $expected = [
