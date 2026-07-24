@@ -52,13 +52,9 @@ class LoginCommand extends Command
             return $this->failure($exception->getMessage());
         }
 
-        $version = is_scalar($response->json['version'] ?? null)
-            ? (string) $response->json['version']
-            : QuickpayClient::API_VERSION;
-
         $this->info('Credentials stored securely.');
         $this->line('Scope: merchant');
-        $this->line("Version: {$version}");
+        $this->line('Version: '.QuickpayClient::API_VERSION);
 
         return self::SUCCESS;
     }

@@ -57,6 +57,11 @@ class AuthCommand extends Command
             return $this->failure('Quickpay authentication check did not return an active scope.');
         }
 
+        if (CredentialRedactor::redact($scope, $apiKey) !== $scope
+            || preg_match('/\A[a-z][a-z0-9_-]{0,31}\z/D', $scope) !== 1) {
+            return $this->failure('Quickpay returned an invalid scope.');
+        }
+
         $this->line("Scope: {$scope}");
 
         return self::SUCCESS;

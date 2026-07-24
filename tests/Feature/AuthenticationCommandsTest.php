@@ -1,9 +1,11 @@
 <?php
 
+use App\Commands\AuthCommand;
 use App\Credentials\CredentialStore;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Symfony\Component\Console\Tester\CommandTester;
 
 beforeEach(function () {
     $this->tempDirectory = sys_get_temp_dir().'/quickpay-commands-'.bin2hex(random_bytes(8));
@@ -56,6 +58,19 @@ it('logs in after validating a merchant credential and never displays the key', 
 
     Http::assertSent(fn (Request $request): bool => $request->url() === 'https://api.quickpay.net/ping'
         && $request->header('Authorization') === ['Basic '.base64_encode(':merchant-secret')]);
+});
+
+it('does not render a reflected credential from the successful login version field', function () {
+    Http::fake(['https://api.quickpay.net/ping' => Http::response([
+        'scope' => 'merchant',
+        'version' => 'reflected-secret',
+    ])]);
+
+    $this->artisan('login')
+        ->expectsQuestion('API key', 'reflected-secret')
+        ->expectsOutputToContain('Version: v10')
+        ->doesntExpectOutputToContain('reflected-secret')
+        ->assertExitCode(0);
 });
 
 it('rejects an empty login credential before making a request', function () {
@@ -133,6 +148,16 @@ it('shows the current authenticated scope without displaying the credential', fu
         ->assertExitCode(0);
 });
 
+it('does not render a reflected credential from a successful auth scope field', function () {
+    file_put_contents($this->credentialPath, json_encode(['api_key' => 'stored-secret'], JSON_THROW_ON_ERROR));
+    Http::fake(['https://api.quickpay.net/ping' => Http::response(['scope' => 'stored-secret', 'version' => 'v10'])]);
+
+    $this->artisan('auth')
+        ->expectsOutputToContain('Quickpay returned an invalid scope')
+        ->doesntExpectOutputToContain('stored-secret')
+        ->assertExitCode(1);
+});
+
 it('reports auth api errors safely and exits non-zero', function () {
     putenv('QUICKPAY_API_KEY=environment-secret');
     Http::fake(['https://api.quickpay.net/ping' => Http::response(['message' => 'Invalid API key environment-secret'], 401)]);
@@ -142,6 +167,21 @@ it('reports auth api errors safely and exits non-zero', function () {
         ->expectsOutputToContain('Invalid API key [redacted]')
         ->doesntExpectOutputToContain('environment-secret')
         ->assertExitCode(1);
+});
+
+it('routes command failures to stderr', function () {
+    putenv('QUICKPAY_API_KEY=stderr-secret');
+    Http::fake(['https://api.quickpay.net/ping' => Http::response(['message' => 'Invalid API key'], 401)]);
+
+    $command = new AuthCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+
+    $status = $tester->execute([], ['capture_stderr_separately' => true]);
+
+    expect($status)->toBe(1)
+        ->and($tester->getErrorOutput())->toContain('Authentication check failed: Invalid API key')
+        ->and($tester->getDisplay())->not->toContain('Authentication check failed');
 });
 
 it('reports auth network errors safely and exits non-zero', function () {

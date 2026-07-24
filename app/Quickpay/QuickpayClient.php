@@ -130,7 +130,7 @@ final readonly class QuickpayClient
     private function pendingRequest(array $headers): PendingRequest
     {
         foreach (array_keys($headers) as $name) {
-            if (in_array(strtolower($name), ['authorization', 'host', 'accept-version'], true)) {
+            if (in_array(strtolower($name), ['authorization', 'host', 'accept', 'accept-version', 'content-type'], true)) {
                 throw new InvalidArgumentException("The {$name} header cannot be overridden.");
             }
         }

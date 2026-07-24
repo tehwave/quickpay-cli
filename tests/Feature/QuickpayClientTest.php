@@ -38,6 +38,36 @@ it('supports each required http method without retrying mutations', function (st
     Http::assertSentCount(1);
 })->with(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 
+it('uses a thirty second request timeout', function () {
+    $requestOptions = null;
+    Http::fake(function (Request $request, array $options) use (&$requestOptions) {
+        $requestOptions = $options;
+
+        return Http::response(['ok' => true]);
+    });
+
+    $client = new QuickpayClient(app(Factory::class), 'secret');
+    $client->get('/ping');
+
+    expect($requestOptions)->toBeArray()
+        ->and($requestOptions['timeout'] ?? null)->toBe(30);
+});
+
+it('does not retry a failed mutation', function (string $method) {
+    $attempts = 0;
+    Http::fake(function () use (&$attempts) {
+        $attempts++;
+
+        throw new ConnectionException('Mutation failed');
+    });
+
+    $client = new QuickpayClient(app(Factory::class), 'secret');
+
+    expect(fn () => $client->{strtolower($method)}('/resources', data: ['name' => 'Example']))
+        ->toThrow(QuickpayRequestException::class);
+    expect($attempts)->toBe(1);
+})->with(['POST', 'PUT', 'PATCH', 'DELETE']);
+
 it('rejects unvalidated absolute urls', function () {
     Http::fake();
 
@@ -61,7 +91,7 @@ it('allows only validated quickpay pagination urls', function () {
         ->toThrow(InvalidArgumentException::class, 'Quickpay');
 });
 
-it('prevents extra headers from overriding request security', function (string $header) {
+it('prevents mixed-case extra headers from overriding request security', function (string $header) {
     Http::fake();
 
     $client = new QuickpayClient(app(Factory::class), 'secret');
@@ -70,7 +100,7 @@ it('prevents extra headers from overriding request security', function (string $
         ->toThrow(InvalidArgumentException::class, 'cannot be overridden');
 
     Http::assertNothingSent();
-})->with(['Authorization', 'Host', 'Accept-Version']);
+})->with(['aUtHoRiZaTiOn', 'hOsT', 'AcCePt-VeRsIoN', 'aCcEpT', 'CoNtEnT-TyPe']);
 
 it('turns connection failures into a safe exception', function () {
     Http::fake(fn () => throw new ConnectionException('Failed using test-secret'));
