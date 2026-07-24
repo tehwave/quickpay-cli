@@ -9,6 +9,8 @@ The package is prepared for a future public Composer/Packagist release, but it i
 - PHP 8.4 or newer
 - Composer
 
+Reproducible PHAR builds use Composer 2.8.9. Continuous integration pins that version explicitly.
+
 ### Local development
 
 Clone or enter this checkout, then install its dependencies:
@@ -133,16 +135,18 @@ builds/quickpay list
 php scripts/verify-phar-source.php builds/quickpay dev
 ```
 
+`composer build` first runs a fresh lock-file install with `COMPOSER_ROOT_VERSION=dev-main`, then invokes Box. This keeps Composer's generated root package identity stable; use Composer 2.8.9 for the same generated dependency metadata as continuous integration.
+
 `composer.json` exposes `builds/quickpay` as the Composer bin target. That built executable is intentionally tracked so a future Composer package archive contains the file its bin entry references. Other build artifacts remain ignored.
 
-The integrity verifier derives the complete expected archive from `box.json`, the checkout, `composer.json`, `composer.lock`, and the installed Box compiler. It checks the exact packaged file set across application, bootstrap, configuration, launcher, Composer, vendor, and Box runtime files, plus the executable stub. PHP is compared after Box's whitespace/comment compaction, JSON after formatting normalization, and all other files byte-for-byte. Box ignores hidden development metadata inside configured directories; no executable PHP or security metadata is otherwise excluded from verification.
+The integrity verifier derives the complete expected archive from `box.json`, the checkout, `composer.json`, `composer.lock`, and the installed Box compiler. It checks the exact packaged file set across application, bootstrap, configuration, launcher, Composer, vendor, and Box runtime files, plus the executable stub. PHP is compared byte-for-byte after replaying the exact installed Box PHP compactor. JSON and all other files are compared byte-for-byte without semantic normalization, which preserves object/list distinctions and integers larger than 64 bits. Only proven Composer install volatility is normalized: this project's generated root identity and root classmap entries, Composer's generated initializer suffix, and Pest's plugin ordering. Dependency metadata and autoload entries remain exact. Box ignores hidden development metadata inside configured directories; no executable PHP or security metadata is otherwise excluded from verification.
 
 There is no self-update command. After publication, updates will use Composer, for example `composer global update peterchrjoergensen/quickpay-cli`.
 
 ### Future release procedure — not yet performed
 
 1. Choose and set the intended release version.
-2. Run `composer check`.
+2. With Composer 2.8.9, run `COMPOSER_ROOT_VERSION=dev-main composer install --no-interaction --no-progress --prefer-dist`, then `composer check`.
 3. Rebuild the tracked PHAR with that exact version, for example `php quickpay app:build quickpay --build-version=1.2.3 --no-interaction`; do not tag a release built as `dev`.
 4. Run `builds/quickpay --version`, `builds/quickpay list`, and `php scripts/verify-phar-source.php builds/quickpay 1.2.3`, then review the diff and verify no credential/config file is included.
 5. Commit the source and rebuilt `builds/quickpay`, tag the verified commit, then create the GitHub release and publish the matching Packagist package.

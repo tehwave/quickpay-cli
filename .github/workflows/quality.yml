@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+env:
+  COMPOSER_ROOT_VERSION: dev-main
+
 jobs:
   test:
     name: Tests (PHP ${{ matrix.php }})
@@ -19,6 +22,7 @@ jobs:
         with:
           php-version: ${{ matrix.php }}
           coverage: none
+          tools: composer:2.8.9
       - run: composer install --no-interaction --no-progress --prefer-dist
       - run: composer test
 
@@ -30,6 +34,7 @@ jobs:
         with:
           php-version: '8.5'
           coverage: none
+          tools: composer:2.8.9
       - run: composer install --no-interaction --no-progress --prefer-dist
       - run: composer analyse
 
@@ -41,6 +46,7 @@ jobs:
         with:
           php-version: '8.5'
           coverage: none
+          tools: composer:2.8.9
       - run: composer install --no-interaction --no-progress --prefer-dist
       - run: composer format:test
 
@@ -52,6 +58,7 @@ jobs:
         with:
           php-version: '8.5'
           coverage: none
+          tools: composer:2.8.9
       - run: composer install --no-interaction --no-progress --prefer-dist
       - run: test -x builds/quickpay
       - run: builds/quickpay --version

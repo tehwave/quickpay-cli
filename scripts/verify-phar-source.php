@@ -29,7 +29,7 @@ final class PharSourceIntegrityVerifier
         $archive = self::pharContents($pharPath);
         $issues = self::compareContents($expected, $archive);
 
-        array_push($issues, ...self::stubIssues($pharPath));
+        array_push($issues, ...self::stubIssues($projectRoot, $pharPath));
 
         return [
             'issues' => $issues,
@@ -55,16 +55,29 @@ final class PharSourceIntegrityVerifier
 
         foreach ($box['directories'] as $directory) {
             foreach (self::directoryContents($projectRoot, $directory) as $path => $content) {
-                $contents[$path] = $content;
+                $contents[$path] = self::compactConfiguredFile($projectRoot, $box, $path, $content);
             }
         }
 
-        foreach (['composer.json', 'composer.lock', 'quickpay'] as $path) {
-            $contents[$path] = self::read($projectRoot.'/'.$path);
-        }
-
-        $contents['quickpay'] = self::packagedLauncher($contents['quickpay']);
-        $contents['config/app.php'] = self::expectedAppConfig($projectRoot, $buildVersion);
+        $contents['composer.json'] = self::compactConfiguredFile(
+            $projectRoot,
+            $box,
+            'composer.json',
+            self::read($projectRoot.'/composer.json'),
+        );
+        $contents['composer.lock'] = self::compactConfiguredFile(
+            $projectRoot,
+            $box,
+            'composer.lock',
+            self::read($projectRoot.'/composer.lock'),
+        );
+        $contents['quickpay'] = self::packagedLauncher(self::read($projectRoot.'/quickpay'));
+        $contents['config/app.php'] = self::compactConfiguredFile(
+            $projectRoot,
+            $box,
+            'config/app.php',
+            self::expectedAppConfig($projectRoot, $buildVersion),
+        );
 
         foreach (self::boxRuntimeContents($projectRoot) as $path => $content) {
             $contents[$path] = $content;
@@ -101,45 +114,15 @@ final class PharSourceIntegrityVerifier
         }
 
         foreach ($shared as $path) {
-            $mode = self::comparisonMode($path);
+            $expected = self::normalizeProvenComposerVolatility($path, $source[$path]);
+            $actual = self::normalizeProvenComposerVolatility($path, $archive[$path]);
 
-            if ($mode === 'php'
-                && self::semanticTokenStream($source[$path]) !== self::semanticTokenStream($archive[$path])) {
-                $issues[] = "Semantic PHP mismatch: {$path}";
-            } elseif ($mode === 'json' && ! self::jsonMatches($source[$path], $archive[$path])) {
-                $issues[] = "Semantic JSON mismatch: {$path}";
-            } elseif ($mode === 'exact' && $source[$path] !== $archive[$path]) {
+            if ($expected !== $actual) {
                 $issues[] = "Byte mismatch: {$path}";
             }
         }
 
         return $issues;
-    }
-
-    /** @return array<int, string> */
-    public static function semanticTokenStream(string $php): array
-    {
-        $stream = [];
-
-        foreach (token_get_all($php) as $token) {
-            if (! is_array($token)) {
-                $stream[] = 'CHAR'.chr(0).$token;
-
-                continue;
-            }
-
-            [$id, $text] = $token;
-
-            if (in_array($id, [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
-                continue;
-            }
-
-            $stream[] = in_array($id, [T_OPEN_TAG, T_OPEN_TAG_WITH_ECHO], true)
-                ? token_name($id)
-                : token_name($id).chr(0).$text;
-        }
-
-        return $stream;
     }
 
     /** @return array<string, mixed> */
@@ -169,7 +152,6 @@ final class PharSourceIntegrityVerifier
             'compression' => 'GZ',
             'compactors' => [
                 'KevinGH\\Box\\Compactor\\Php',
-                'KevinGH\\Box\\Compactor\\Json',
             ],
         ];
 
@@ -184,6 +166,97 @@ final class PharSourceIntegrityVerifier
         if ($unsupported !== []) {
             throw new RuntimeException('Unsupported box.json keys: '.implode(', ', $unsupported));
         }
+    }
+
+    /** @param array<string, mixed> $box */
+    private static function compactConfiguredFile(
+        string $projectRoot,
+        array $box,
+        string $path,
+        string $contents,
+    ): string {
+        foreach (self::boxCompactors($projectRoot, $box['compactors']) as $compactor) {
+            $contents = $compactor->compact($path, $contents);
+        }
+
+        return $contents;
+    }
+
+    /**
+     * @param  array<int, string>  $configured
+     * @return array<int, object{compact: callable(string, string): string}>
+     */
+    private static function boxCompactors(string $projectRoot, array $configured): array
+    {
+        static $cache = [];
+
+        $context = self::boxContext($projectRoot);
+        $cacheKey = $context['hash'].'|'.implode('|', $configured);
+
+        if (isset($cache[$cacheKey])) {
+            return $cache[$cacheKey];
+        }
+
+        $compactors = [];
+
+        foreach ($configured as $class) {
+            if (! is_string($class) || ! class_exists($class)) {
+                throw new RuntimeException("Configured Box compactor is unavailable: {$class}");
+            }
+
+            if ($class === 'KevinGH\\Box\\Compactor\\Php') {
+                $configurationClass = $context['namespace'].'\\KevinGH\\Box\\Configuration\\Configuration';
+                $constant = (new ReflectionClass($configurationClass))
+                    ->getReflectionConstant('DEFAULT_IGNORED_ANNOTATIONS');
+
+                if ($constant === false || ! is_array($ignored = $constant->getValue())) {
+                    throw new RuntimeException('Unable to read the Box PHP compactor annotation configuration.');
+                }
+
+                $compactors[] = $class::create($ignored);
+
+                continue;
+            }
+
+            $compactors[] = new $class;
+        }
+
+        return $cache[$cacheKey] = $compactors;
+    }
+
+    /** @return array{alias: string, namespace: string, hash: string} */
+    private static function boxContext(string $projectRoot): array
+    {
+        static $cache = [];
+
+        $boxPath = realpath($projectRoot.'/vendor/laravel-zero/framework/bin/box');
+
+        if ($boxPath === false || ! is_file($boxPath)) {
+            throw new RuntimeException('The Laravel Zero Box compiler is missing.');
+        }
+
+        $hash = hash_file('sha256', $boxPath);
+
+        if ($hash === false) {
+            throw new RuntimeException('Unable to hash the Laravel Zero Box compiler.');
+        }
+
+        if (isset($cache[$hash])) {
+            return $cache[$hash];
+        }
+
+        $alias = 'quickpay-box-source-'.substr($hash, 0, 16).'.phar';
+        Phar::loadPhar($boxPath, $alias);
+        require_once "phar://{$alias}/vendor/autoload.php";
+
+        $dumper = self::read("phar://{$alias}/src/RequirementChecker/RequirementsDumper.php");
+        $namespace = preg_replace('/\\\\KevinGH\\\\Box\\\\RequirementChecker$/', '', self::phpNamespace($dumper));
+
+        if (! is_string($namespace) || $namespace === '') {
+            throw new RuntimeException('Unable to determine the Box compiler namespace.');
+        }
+
+        return $cache[$hash] = compact('alias', 'namespace', 'hash');
     }
 
     /** @return array<string, string> */
@@ -271,24 +344,14 @@ final class PharSourceIntegrityVerifier
     {
         static $cache = [];
 
-        $boxPath = realpath($projectRoot.'/vendor/laravel-zero/framework/bin/box');
-
-        if ($boxPath === false || ! is_file($boxPath)) {
-            throw new RuntimeException('The Laravel Zero Box compiler is missing.');
-        }
-
-        $cacheKey = hash_file('sha256', $boxPath);
-
-        if ($cacheKey === false) {
-            throw new RuntimeException('Unable to hash the Laravel Zero Box compiler.');
-        }
+        $context = self::boxContext($projectRoot);
+        $cacheKey = $context['hash'];
 
         if (isset($cache[$cacheKey])) {
             return $cache[$cacheKey];
         }
 
-        $alias = 'quickpay-box-source-'.substr($cacheKey, 0, 16).'.phar';
-        Phar::loadPhar($boxPath, $alias);
+        $alias = $context['alias'];
         $resourceRoot = "phar://{$alias}/res/requirement-checker";
         $contents = [];
         $files = new RecursiveIteratorIterator(
@@ -306,14 +369,7 @@ final class PharSourceIntegrityVerifier
             $contents[self::BOX_RUNTIME_PREFIX.$relativePath] = self::read($path);
         }
 
-        $dumper = self::read("phar://{$alias}/src/RequirementChecker/RequirementsDumper.php");
-        $namespace = preg_replace('/\\\\KevinGH\\\\Box\\\\RequirementChecker$/', '', self::phpNamespace($dumper));
-
-        if (! is_string($namespace) || $namespace === '') {
-            throw new RuntimeException('Unable to determine the Box compiler namespace.');
-        }
-
-        $contents['.box/.requirements.php'] = self::expectedRequirementsPhp($projectRoot, $namespace);
+        $contents['.box/.requirements.php'] = self::expectedRequirementsPhp($projectRoot, $context['namespace']);
         ksort($contents);
 
         return $cache[$cacheKey] = $contents;
@@ -530,8 +586,95 @@ final class PharSourceIntegrityVerifier
         return $contents;
     }
 
+    private static function normalizeProvenComposerVolatility(string $path, string $contents): string
+    {
+        if ($path === 'vendor/composer/installed.php') {
+            $contents = self::normalizeComposerInstalledRootIdentity($contents);
+        }
+
+        if ($path === 'vendor/composer/autoload_classmap.php') {
+            $contents = preg_replace(
+                '~^\'App\\\\\\\\[^\'\r\n]*\' => \$baseDir \. \'/app/[^\'\r\n]+\',\r?\n~m',
+                '',
+                $contents,
+            ) ?? $contents;
+        }
+
+        if ($path === 'vendor/composer/autoload_static.php') {
+            $contents = preg_replace(
+                "~^'App\\\\\\\\[^'\\r\\n]*' => __DIR__ \\. '/\\.\\./\\.\\.' \\. '/app/[^'\\r\\n]+',\\r?\\n~m",
+                '',
+                $contents,
+            ) ?? $contents;
+        }
+
+        if (in_array($path, [
+            'vendor/autoload.php',
+            'vendor/composer/autoload_real.php',
+            'vendor/composer/autoload_static.php',
+        ], true)) {
+            $contents = preg_replace(
+                '/Composer(AutoloaderInit|StaticInit)[a-f0-9]{32}/',
+                'Composer$1{initializer-suffix}',
+                $contents,
+            ) ?? $contents;
+        }
+
+        if ($path === 'vendor/pest-plugins.json') {
+            $contents = self::normalizePestPluginOrder($contents);
+        }
+
+        return $contents;
+    }
+
+    private static function normalizeComposerInstalledRootIdentity(string $contents): string
+    {
+        foreach (['root', 'peterchrjoergensen/quickpay-cli'] as $package) {
+            $quoted = preg_quote($package, '~');
+            $contents = preg_replace_callback(
+                "~(^'{$quoted}' => array\\(\\r?\\n)(.*?)(^\\),\\r?$)~ms",
+                static function (array $matches): string {
+                    $identity = preg_replace(
+                        "/^'(pretty_version|version|reference)' => [^\\r\\n]+,\\r?$/m",
+                        "'$1' => '{root-identity}',",
+                        $matches[2],
+                    );
+
+                    return $matches[1].($identity ?? $matches[2]).$matches[3];
+                },
+                $contents,
+                1,
+            ) ?? $contents;
+        }
+
+        return $contents;
+    }
+
+    private static function normalizePestPluginOrder(string $contents): string
+    {
+        try {
+            $plugins = json_decode($contents, true, 512, JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
+            return $contents;
+        }
+
+        if (! is_array($plugins) || ! array_is_list($plugins)) {
+            return $contents;
+        }
+
+        foreach ($plugins as $plugin) {
+            if (! is_string($plugin)) {
+                return $contents;
+            }
+        }
+
+        sort($plugins, SORT_STRING);
+
+        return json_encode($plugins, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    }
+
     /** @return array<int, string> */
-    private static function stubIssues(string $pharPath): array
+    private static function stubIssues(string $projectRoot, string $pharPath): array
     {
         $binary = self::read($pharPath);
         $halt = '__HALT_COMPILER(); ?>';
@@ -554,61 +697,30 @@ final class PharSourceIntegrityVerifier
         }
 
         $normalized = str_replace($alias, '{generated-alias}', $stub);
-        $expected = <<<'PHP'
-#!/usr/bin/env php
-<?php
-Phar::mapPhar('{generated-alias}');
-require 'phar://{generated-alias}/.box/bin/check-requirements.php';
-$_SERVER['SCRIPT_FILENAME'] = 'phar://{generated-alias}/quickpay';
-require 'phar://{generated-alias}/quickpay';
-__HALT_COMPILER(); ?>
-PHP;
+        $context = self::boxContext($projectRoot);
+        $versionFunction = $context['namespace'].'\\KevinGH\\Box\\get_box_version';
+        $stubGenerator = $context['namespace'].'\\KevinGH\\Box\\StubGenerator';
 
-        return self::semanticTokenStream($normalized) === self::semanticTokenStream($expected)
+        if (! function_exists($versionFunction) || ! class_exists($stubGenerator)) {
+            throw new RuntimeException('The installed Box stub generator is unavailable.');
+        }
+
+        $banner = sprintf(
+            "Generated by Humbug Box %s.\n\n@link https://github.com/humbug/box",
+            $versionFunction(),
+        );
+        $expected = $stubGenerator::generateStub(
+            '{generated-alias}',
+            $banner,
+            'quickpay',
+            false,
+            '#!/usr/bin/env php',
+            true,
+        );
+
+        return $normalized === rtrim($expected, "\r\n")
             ? []
-            : ['Semantic PHP mismatch: @phar/stub.php'];
-    }
-
-    private static function comparisonMode(string $path): string
-    {
-        if ($path === 'quickpay' || str_ends_with($path, '.php')) {
-            return 'php';
-        }
-
-        if (basename($path) === 'composer.lock' || str_ends_with($path, '.json')) {
-            return 'json';
-        }
-
-        return 'exact';
-    }
-
-    private static function jsonMatches(string $expected, string $actual): bool
-    {
-        try {
-            $expectedValue = json_decode($expected, true, 512, JSON_THROW_ON_ERROR);
-            $actualValue = json_decode($actual, true, 512, JSON_THROW_ON_ERROR);
-        } catch (JsonException) {
-            return false;
-        }
-
-        return self::canonicalJsonValue($expectedValue) === self::canonicalJsonValue($actualValue);
-    }
-
-    private static function canonicalJsonValue(mixed $value): mixed
-    {
-        if (! is_array($value)) {
-            return $value;
-        }
-
-        if (! array_is_list($value)) {
-            ksort($value);
-        }
-
-        foreach ($value as $key => $item) {
-            $value[$key] = self::canonicalJsonValue($item);
-        }
-
-        return $value;
+            : ['Byte mismatch: @phar/stub.php'];
     }
 
     /**

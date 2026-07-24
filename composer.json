@@ -42,7 +42,10 @@
         "analyse": "vendor/bin/phpstan analyse --memory-limit=1G",
         "format": "vendor/bin/pint",
         "format:test": "vendor/bin/pint --test",
-        "build": "php quickpay app:build quickpay --build-version=dev --no-interaction",
+        "build": [
+            "COMPOSER_ROOT_VERSION=dev-main composer install --no-interaction --no-progress --prefer-dist",
+            "php quickpay app:build quickpay --build-version=dev --no-interaction"
+        ],
         "check": [
             "@test",
             "@analyse",
