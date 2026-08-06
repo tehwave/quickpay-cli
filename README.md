@@ -4,15 +4,16 @@
 [![PHP 8.4+](https://img.shields.io/badge/PHP-8.4%2B-777BB4.svg)](https://www.php.net/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
-**Quickpay from your terminal, including callbacks on localhost.**
+**Manage Quickpay payments from the terminal—and test callbacks on localhost.**
 
-Quickpay CLI is a focused client for creating, inspecting, and managing
-payments through the [Quickpay API](https://learn.quickpay.net/tech-talk/api/).
-Use it interactively with readable output or in automation with JSON.
+Create payment links, inspect and manage payments through the
+[Quickpay API](https://learn.quickpay.net/tech-talk/api/), automate workflows
+with JSON, and run your local callback handler against real Quickpay payment
+activity without exposing it to the internet.
 
 ## Features
 
-- 🔁 Watch Quickpay payment activity and relay signed callbacks to a local endpoint, or replay the current payment state on demand.
+- 🔁 Watch Quickpay payment activity and relay signed callbacks to localhost—no tunnel or public development server required.
 - Create payments and hosted payment links.
 - List, filter, and inspect payments and their operations.
 - Capture, refund, and cancel payments with confirmation safeguards.
@@ -38,16 +39,14 @@ For automation, supply the API key through `QUICKPAY_API_KEY`.
 ## Usage
 
 ```bash
-quickpay payments:create order1234
-quickpay payments:list --accepted
-quickpay payments:get 884201 --json
-quickpay payments:link 884201 2500
+quickpay login
+
 quickpay callbacks:watch --order-id=order1234 \
   --to=http://127.0.0.1:8000/quickpay/callback
 ```
 
-Amounts use integer minor units, so `1000` DKK means DKK 10.00. Commands that
-change a payment ask for confirmation.
+Continue through the payment flow as usual. Signed callbacks arrive at your
+local handler as payment operations happen.
 
 Use `--help` to explore any command and its options:
 
