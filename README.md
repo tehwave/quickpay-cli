@@ -16,13 +16,10 @@ Quickpay CLI requires PHP 8.4 or newer. Install it globally with Composer:
 
 ```bash
 composer global require tehwave/quickpay-cli
-quickpay --version
 ```
 
-If `quickpay` is not found, locate Composer's global binary directory and add it to `PATH`:
-
 ```bash
-composer global config bin-dir --absolute
+quickpay --version
 ```
 
 ## Quick start
@@ -31,16 +28,21 @@ Authenticate with a Quickpay merchant API key:
 
 ```bash
 quickpay login
-quickpay auth
 ```
 
-`login` reads the key through a hidden interactive prompt, validates merchant scope, and stores it in `~/.config/quickpay/config.json`. The directory uses mode `0700`; the file uses `0600`.
+`login` reads the key through a hidden interactive prompt, validates merchant scope, and stores it in `~/.config/quickpay/config.json`.
+
+```bash
+quickpay auth
+```
 
 Then inspect payments:
 
 ```bash
 quickpay payments:list --accepted
-quickpay payments:get 884201
+```
+
+```bash
 quickpay payments:get 884201 --json
 ```
 
@@ -63,22 +65,29 @@ Before a capture, refund, or cancellation, inspect the payment and verify its ID
 
 ```bash
 quickpay payments:get 884201 --json
-quickpay payments:capture 884201 2500 --yes --json
 ```
 
-Never infer permission to mutate a payment from permission to read it.
+```bash
+quickpay payments:capture 884201 2500 --yes --json
+```
 
 ## Commands
 
 ### Authentication
 
-```text
+```bash
 quickpay login
+```
+
+```bash
 quickpay auth
+```
+
+```bash
 quickpay logout
 ```
 
-`logout` removes only the stored config file. If `QUICKPAY_API_KEY` is set, the environment credential remains active until it is unset.
+`logout` removes only the stored config file. When `QUICKPAY_API_KEY` is set, the environment credential remains active until it is unset.
 
 ### Create and inspect payments
 
@@ -101,6 +110,7 @@ quickpay payments:link <id> <amount>
 `order-id` must contain 4–20 characters. Additional `--field` values support nested bracket notation such as `basket[0][qty]=2`; named arguments and options remain authoritative over conflicting fields.
 
 Use `--operations-size=0` when the payment's operation list is not needed.
+
 Human-readable operation tables include Quickpay's callback success, response
 code, and timestamp when those fields are present.
 
@@ -205,10 +215,6 @@ Raw paths must stay relative to `api.quickpay.net`. Full URLs, hosts, schemes, t
 
 Every non-`GET` raw request is treated as a mutation.
 
-## Test transactions
-
-Use Quickpay's [official test data](https://learn.quickpay.net/tech-talk/appendixes/test/) for integration work, and make the receiving system recognize test callbacks. Test transactions can be disabled per merchant in Quickpay Manager.
-
 ## Development
 
 The source checkout uses Laravel Zero 12, Pest 4, Larastan/PHPStan, Pint, and Box. Composer 2.10.2 is pinned for reproducible PHAR builds.
@@ -233,27 +239,32 @@ php scripts/verify-phar-source.php builds/quickpay dev
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) before changing commands or security behavior. Maintainers should follow [docs/RELEASING.md](docs/RELEASING.md) for versioned releases.
 
-## Agent skill
+## For Agents
 
-The repository includes a conservative Quickpay agent skill for coding agents:
+The repository includes a QuickPay Agent Skill for coding agents:
 
 ```bash
 skills add tehwave/quickpay-cli
 ```
-
-The skill does not grant mutation authority; the human operator must still authorize the exact operation, payment, and amount.
 
 ## Security
 
 Please read [SECURITY.md](SECURITY.md) before reporting a vulnerability. Never include API keys, authorization headers, real payment payloads, or merchant data in an issue.
 
 GitHub release assets are published as immutable releases with build provenance.
+
 After downloading a PHAR named `quickpay`, verify both attestations before
 running it:
 
 ```bash
 gh release verify v1.0.0 --repo tehwave/quickpay-cli
+```
+
+```bash
 gh release verify-asset v1.0.0 quickpay --repo tehwave/quickpay-cli
+```
+
+```bash
 gh attestation verify quickpay --repo tehwave/quickpay-cli
 ```
 
