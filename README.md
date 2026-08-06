@@ -217,7 +217,7 @@ Every non-`GET` raw request is treated as a mutation.
 
 ## Development
 
-The source checkout uses Laravel Zero 12, Pest 4, Larastan/PHPStan, Pint, and Box. Composer 2.10.2 is pinned for reproducible PHAR builds.
+The source checkout uses Laravel Zero 12, Pest 4, Larastan/PHPStan, Pint, and Box. 
 
 ```bash
 composer install
@@ -226,7 +226,7 @@ composer coverage
 composer audit --locked --abandoned=fail
 ```
 
-The full test suite uses HTTP fakes and does not contact Quickpay.
+The full test suite uses HTTP fakes and does not contact Quickpay API.
 
 Build and verify the tracked development PHAR:
 
@@ -237,11 +237,13 @@ builds/quickpay list --raw
 php scripts/verify-phar-source.php builds/quickpay dev
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) before changing commands or security behavior. Maintainers should follow [docs/RELEASING.md](docs/RELEASING.md) for versioned releases.
+See [CONTRIBUTING.md](CONTRIBUTING.md) before changing commands or security behavior. 
+
+Maintainers should follow [RELEASING.md](RELEASING.md) for versioned releases.
 
 ## For Agents
 
-The repository includes a QuickPay Agent Skill for coding agents:
+The repository includes a Quickpay CLI Agent Skill for coding agents:
 
 ```bash
 skills add tehwave/quickpay-cli
