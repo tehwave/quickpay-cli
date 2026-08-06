@@ -6,9 +6,7 @@
 
 **Manage Quickpay payments and test callbacks from your terminal.**
 
-Create payment links, manage payments through the
-[Quickpay API](https://learn.quickpay.net/tech-talk/api/), use JSON output in
-scripts, and receive signed callbacks on localhost without a tunnel.
+Create payment links, manage payments through the [Quickpay API](https://learn.quickpay.net/tech-talk/api/), use JSON output in scripts or for agents, and receive signed callbacks on localhost without a tunnel.
 
 ## Features
 
@@ -17,7 +15,9 @@ scripts, and receive signed callbacks on localhost without a tunnel.
 - List, filter, and inspect payments and their operations.
 - Capture, refund, and cancel payments.
 - Call any Quickpay API v10 endpoint.
-- Output JSON for scripts.
+- Script- and agent-friendly, with JSON output and non-interactive options.
+
+⭐ If you like Quickpay CLI, [star it on GitHub](https://github.com/tehwave/quickpay-cli). It helps a lot!
 
 ## Installation
 
@@ -25,6 +25,12 @@ Quickpay CLI requires PHP 8.4 or newer.
 
 ```bash
 composer global require tehwave/quickpay-cli
+```
+
+Install the bundled skill for coding agents:
+
+```bash
+skills add tehwave/quickpay-cli
 ```
 
 Authenticate with a Quickpay merchant API key:
@@ -38,22 +44,23 @@ For automation, supply the API key through `QUICKPAY_API_KEY`.
 ## Usage
 
 ```bash
-quickpay login
-
-quickpay callbacks:watch --order-id=order1234 \
-  --to=http://127.0.0.1:8000/quickpay/callback
+quickpay list
 ```
-
-Leave the watcher running while testing the payment flow. It signs and sends
-payment updates to your local callback handler.
 
 Use `--help` to explore any command and its options:
 
 ```bash
-quickpay list
-quickpay payments:link --help
 quickpay callbacks:watch --help
 ```
+
+### Watch for callbacks and relay them
+
+```bash
+quickpay callbacks:watch --to=http://127.0.0.1:8000/quickpay/callback
+```
+
+Leave the watcher running while testing the payment flow. It signs and sends
+payment updates to your local callback handler.
 
 ## Development
 
@@ -62,20 +69,20 @@ composer install
 composer check
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) before changing commands or security
-behavior. Maintainers should follow [RELEASING.md](RELEASING.md) for releases.
+See [CONTRIBUTING.md](CONTRIBUTING.md) before changing commands or security behavior.
+
+Maintainers should follow [RELEASING.md](RELEASING.md) for releases.
 
 ## Security
 
-Quickpay CLI keeps API keys out of command arguments and asks for confirmation
-before changing a payment. See [SECURITY.md](SECURITY.md) to report a
-vulnerability. Never include credentials or merchant data in an issue.
+Quickpay CLI keeps API keys out of command arguments and asks for confirmation before changing a payment.
+
+See [SECURITY.md](SECURITY.md) to report a vulnerability. Never include credentials or merchant data in an issue.
 
 ## Credits
 
-Created and maintained by [Peter Chr. Jørgensen](https://peterchrjoergensen.dk).
-Built with [Laravel Zero](https://laravel-zero.com/) and released under the
-[MIT License](LICENSE.md).
+Created and maintained by [Peter 🌊 Jørgensen](https://peterchrjoergensen.dk).
 
-Quickpay CLI is an independent open-source project. It is not affiliated with
-or endorsed by Quickpay.
+Built with [Laravel Zero](https://laravel-zero.com/) and released under the [MIT License](LICENSE.md).
+
+Quickpay CLI is an independent open-source project. It is not affiliated with or endorsed by Quickpay.
