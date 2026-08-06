@@ -1,6 +1,10 @@
 <?php
 
+use App\Callbacks\AccountPrivateKeyFetcher;
+use App\Callbacks\PrivateKeyResolver;
 use App\Commands\CallbacksReplayCommand;
+use App\Quickpay\QuickpayClient;
+use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -19,6 +23,15 @@ afterEach(function () {
     ] as $name => $value) {
         $value === false ? putenv($name) : putenv("{$name}={$value}");
     }
+});
+
+it('resolves an environment private key through the stateless provider without contacting Quickpay', function () {
+    Http::fake();
+    $quickpay = new QuickpayClient(app(Factory::class), 'api-key');
+    $resolver = new PrivateKeyResolver(new AccountPrivateKeyFetcher);
+
+    expect($resolver->resolve($quickpay))->toBe('replay-private-key');
+    Http::assertNothingSent();
 });
 
 it('replays a signed current payment callback and emits only a safe json summary', function () {
@@ -59,10 +72,11 @@ it('replays a signed current payment callback and emits only a safe json summary
                 hash_hmac('sha256', $request->body(), 'replay-private-key'),
             ];
     });
+    Http::assertNotSent(fn (Request $request): bool => $request->url() === 'https://api.quickpay.net/account/private-key');
 });
 
-it('resolves an order id and fetches the private key from Quickpay when no environment override exists', function () {
-    putenv('QUICKPAY_PRIVATE_KEY');
+it('resolves an order id and fetches the private key from Quickpay when the environment override is blank', function () {
+    putenv('QUICKPAY_PRIVATE_KEY=   ');
     Http::fake([
         'https://api.quickpay.net/payments?*' => Http::response([['id' => 42, 'order_id' => 'order-42']]),
         'https://api.quickpay.net/payments/42' => Http::response([
@@ -89,6 +103,38 @@ it('resolves an order id and fetches the private key from Quickpay when no envir
     Http::assertSent(fn (Request $request): bool => $request->url() === 'https://api.quickpay.net/account/private-key');
     Http::assertSentCount(4);
 });
+
+it('rejects a malformed account private key without exposing credentials', function (mixed $privateKey) {
+    putenv('QUICKPAY_PRIVATE_KEY');
+    Http::fake([
+        'https://api.quickpay.net/payments/42' => Http::response([
+            'id' => 42,
+            'order_id' => 'order-42',
+            'merchant_id' => 123,
+            'operations' => [],
+        ]),
+        'https://api.quickpay.net/account/private-key' => Http::response(['private_key' => $privateKey]),
+    ]);
+
+    $command = new CallbacksReplayCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+    $status = $tester->execute([
+        'payment-id' => '42',
+        '--to' => 'http://localhost/callback',
+    ], ['capture_stderr_separately' => true]);
+
+    expect($status)->toBe(1)
+        ->and($tester->getErrorOutput())->toContain('invalid account private key response')
+        ->not->toContain('nested-private-key', 'replay-api-secret')
+        ->and($tester->getDisplay())->not->toContain('nested-private-key', 'replay-api-secret');
+    Http::assertSentCount(2);
+})->with([
+    'missing' => [null],
+    'empty' => [''],
+    'whitespace' => [" \n\t"],
+    'non-string' => [['nested-private-key']],
+]);
 
 it('requires exactly one selector and an explicit valid destination before making requests', function (array $arguments, string $message) {
     Http::fake();

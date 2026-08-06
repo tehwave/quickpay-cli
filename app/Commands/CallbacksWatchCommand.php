@@ -2,7 +2,6 @@
 
 namespace App\Commands;
 
-use App\Callbacks\AccountPrivateKeyFetcher;
 use App\Callbacks\CallbackWatcherFactory;
 use App\Callbacks\PrivateKeyResolver;
 use App\Commands\Concerns\InteractsWithCallbackInput;
@@ -42,11 +41,18 @@ class CallbacksWatchCommand extends Command
         QuickpayClientFactory $clients,
         Factory $http,
         CallbackWatcherFactory $watchers,
+        PrivateKeyResolver $privateKeys,
     ): int {
         return $this->withQuickpay(
             $credentials,
             $clients,
-            fn (QuickpayClient $quickpay, string $apiKey): int => $this->watch($quickpay, $http, $watchers, $apiKey),
+            fn (QuickpayClient $quickpay, string $apiKey): int => $this->watch(
+                $quickpay,
+                $http,
+                $watchers,
+                $privateKeys,
+                $apiKey,
+            ),
         );
     }
 
@@ -54,6 +60,7 @@ class CallbacksWatchCommand extends Command
         QuickpayClient $quickpay,
         Factory $http,
         CallbackWatcherFactory $watchers,
+        PrivateKeyResolver $privateKeys,
         string $apiKey,
     ): int {
         [$paymentId, $orderId] = $this->callbackSelector();
@@ -68,9 +75,7 @@ class CallbacksWatchCommand extends Command
             throw new InvalidArgumentException('interval must be an integer from 1 through 60.');
         }
 
-        $privateKey = (new PrivateKeyResolver(
-            fn (): string => (new AccountPrivateKeyFetcher)->fetch($quickpay),
-        ))->resolve();
+        $privateKey = $privateKeys->resolve($quickpay);
         $runner = $watchers->make($quickpay, $http);
 
         $this->info($this->safeTerminalText(

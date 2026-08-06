@@ -2,7 +2,6 @@
 
 namespace App\Commands;
 
-use App\Callbacks\AccountPrivateKeyFetcher;
 use App\Callbacks\CallbackEnvelopeFactory;
 use App\Callbacks\CallbackForwarder;
 use App\Callbacks\PaymentLocator;
@@ -41,16 +40,21 @@ class CallbacksReplayCommand extends Command
         CredentialStore $credentials,
         QuickpayClientFactory $clients,
         Factory $http,
+        PrivateKeyResolver $privateKeys,
     ): int {
         return $this->withQuickpay(
             $credentials,
             $clients,
-            fn (QuickpayClient $quickpay, string $apiKey): int => $this->replay($quickpay, $http, $apiKey),
+            fn (QuickpayClient $quickpay, string $apiKey): int => $this->replay($quickpay, $http, $privateKeys, $apiKey),
         );
     }
 
-    private function replay(QuickpayClient $quickpay, Factory $http, string $apiKey): int
-    {
+    private function replay(
+        QuickpayClient $quickpay,
+        Factory $http,
+        PrivateKeyResolver $privateKeys,
+        string $apiKey,
+    ): int {
         [$paymentId, $orderId] = $this->callbackSelector();
         $target = $this->callbackTarget();
         $locator = new PaymentLocator($quickpay);
@@ -62,9 +66,7 @@ class CallbacksReplayCommand extends Command
             throw new InvalidArgumentException("No payment found for order ID {$orderId}.");
         }
 
-        $privateKey = (new PrivateKeyResolver(
-            fn (): string => (new AccountPrivateKeyFetcher)->fetch($quickpay),
-        ))->resolve();
+        $privateKey = $privateKeys->resolve($quickpay);
         $envelope = (new CallbackEnvelopeFactory)->make($payment, $apiKey, $privateKey);
         $delivery = (new CallbackForwarder($http))->deliver($target, $envelope);
         $summary = [
