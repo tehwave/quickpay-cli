@@ -4,6 +4,12 @@ namespace App\Support;
 
 use InvalidArgumentException;
 
+/**
+ * Detects a real terminal independently from Symfony's interactive flag.
+ *
+ * Both checks are required before accepting confirmation: a command can be
+ * marked interactive while stdin is still a pipe.
+ */
 final class NativeStdinTerminalDetector implements StdinTerminalDetector
 {
     /** @var resource */

@@ -6,6 +6,12 @@ use InvalidArgumentException;
 use JsonException;
 use ValueError;
 
+/**
+ * Produces a comparison key for pagination cycle detection.
+ *
+ * Query-key order is irrelevant, while repeated values, their order, and the
+ * difference between `flag` and `flag=` are significant and stay preserved.
+ */
 final class PaginationTargetCanonicalizer
 {
     /** @param array<string, mixed> $query */
@@ -38,6 +44,8 @@ final class PaginationTargetCanonicalizer
                 $rawKey = $separator === false ? $pair : substr($pair, 0, $separator);
                 $rawValue = $separator === false ? '' : substr($pair, $separator + 1);
                 $decodedKey = urldecode($rawKey);
+                // Base64 keeps arbitrary decoded bytes valid as array keys and
+                // JSON strings without conflating distinct byte sequences.
                 $groupKey = base64_encode($decodedKey);
                 $groups[$groupKey] ??= ['key' => $groupKey, 'values' => []];
                 $groups[$groupKey]['values'][] = [$separator !== false, base64_encode(urldecode($rawValue))];

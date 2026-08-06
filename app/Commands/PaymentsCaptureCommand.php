@@ -4,7 +4,7 @@ namespace App\Commands;
 
 class PaymentsCaptureCommand extends PaymentMutationCommand
 {
-    protected $signature = 'payments:capture {id} {amount} {--synchronized} {--callback-url=} {--yes} {--json}';
+    protected $signature = 'payments:capture {id} {amount} {--synchronized} {--callback-url= : Callback URL for Quickpay servers (not localhost)} {--yes} {--json}';
 
     protected $description = 'Capture an authorized Quickpay payment';
 

@@ -256,10 +256,100 @@ it('requires deterministic box settings for the verified manifest', function () 
 
 it('pins composer and a deterministic root identity in continuous integration', function () {
     $workflow = file_get_contents(dirname(__DIR__, 2).'/.github/workflows/quality.yml');
+    preg_match_all('/tools: composer:([^\s]+)/', $workflow, $matches);
 
     expect($workflow)
         ->toContain("env:\n  COMPOSER_ROOT_VERSION: dev-main")
-        ->and(substr_count($workflow, 'tools: composer:2.8.9'))->toBe(4);
+        ->and($matches[1])->not->toBeEmpty()
+        ->and(array_values(array_unique($matches[1])))->toBe(['2.10.2']);
+});
+
+it('keeps release binary builds manually dispatched and limits writes to the phar', function () {
+    $workflowPath = dirname(__DIR__, 2).'/.github/workflows/build-release.yml';
+
+    expect($workflowPath)->toBeFile();
+
+    $workflow = file_get_contents($workflowPath);
+    $buildScript = file_get_contents(dirname(__DIR__, 2).'/scripts/build-release');
+
+    expect($buildScript)->not->toBeFalse();
+
+    expect($workflow)
+        ->toContain("on:\n  workflow_dispatch:")
+        ->toContain("permissions:\n  contents: read")
+        ->toContain('tools: composer:2.10.2')
+        ->toContain('scripts/build-release "$RELEASE_VERSION" "$RUNNER_TEMP/quickpay-release"')
+        ->toContain('actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02')
+        ->toContain('actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6')
+        ->toContain('actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093')
+        ->toContain('if [[ "$SELECTED_REF" != refs/heads/* ]]')
+        ->toContain('if [[ "$SELECTED_REF" == "refs/heads/$DEFAULT_BRANCH" ]]')
+        ->toContain('git add -- builds/quickpay')
+        ->toContain('git commit -m "Build Quickpay $RELEASE_VERSION"')
+        ->toContain('git push origin "HEAD:refs/heads/$TARGET_BRANCH"')
+        ->not->toContain("\n  push:")
+        ->not->toContain("\n  pull_request:")
+        ->not->toContain("\n  schedule:")
+        ->not->toContain('pull-requests: write')
+        ->not->toContain('packages: write')
+        ->not->toContain('git add .')
+        ->not->toContain('git add -A')
+        ->not->toContain('git tag')
+        ->not->toContain('gh release')
+        ->not->toContain('QUICKPAY_API_KEY');
+
+    [$buildJob, $remainingJobs] = explode("\n  attest:\n", $workflow, 2);
+    [$attestJob, $commitJob] = explode("\n  commit:\n", $remainingJobs, 2);
+
+    expect($buildJob)
+        ->not->toContain('contents: write')
+        ->not->toContain('id-token: write')
+        ->not->toContain('attestations: write')
+        ->toContain('persist-credentials: false')
+        ->and($attestJob)
+        ->toContain("id-token: write\n      attestations: write")
+        ->not->toContain('scripts/build-release')
+        ->not->toContain('php ')
+        ->and($commitJob)
+        ->toContain("permissions:\n      contents: write")
+        ->toContain('needs: [build, attest]')
+        ->toContain('ref: ${{ github.sha }}')
+        ->not->toContain('scripts/build-release')
+        ->not->toContain('builds/quickpay --version')
+        ->not->toContain('php ');
+
+    expect($buildScript)
+        ->toContain('php quickpay app:build quickpay --build-version="$release_version" --no-interaction')
+        ->toContain('QUICKPAY_PHAR_BUILD_VERSION="$release_version" composer check')
+        ->toContain('QUICKPAY_PHAR_BUILD_VERSION="$release_version" composer coverage')
+        ->toContain('php scripts/verify-phar-source.php builds/quickpay "$release_version"');
+
+    expect(strpos($buildScript, 'php quickpay app:build'))
+        ->toBeLessThan(strpos($buildScript, 'composer check'));
+});
+
+it('pins every GitHub Action to a full commit SHA and keeps quality read only', function () {
+    $workflowPaths = glob(dirname(__DIR__, 2).'/.github/workflows/*.yml');
+
+    expect($workflowPaths)->not->toBeFalse()->not->toBeEmpty();
+
+    foreach ($workflowPaths as $workflowPath) {
+        $workflow = file_get_contents($workflowPath);
+        preg_match_all('/uses:\s+[^@\s]+@([^\s]+)/', $workflow, $matches);
+
+        expect($matches[1])->not->toBeEmpty();
+
+        foreach ($matches[1] as $reference) {
+            expect($reference)->toMatch('/^[a-f0-9]{40}$/');
+        }
+    }
+
+    $quality = file_get_contents(dirname(__DIR__, 2).'/.github/workflows/quality.yml');
+
+    expect($quality)
+        ->toContain("permissions:\n  contents: read")
+        ->toContain('actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294')
+        ->not->toContain('pull_request_target');
 });
 
 it('refreshes dependencies with the deterministic root identity before building', function () {
@@ -278,15 +368,18 @@ it('refreshes dependencies with the deterministic root identity before building'
 
 it('matches the committed phar complete runtime to the project and dependency source', function () {
     $projectRoot = dirname(__DIR__, 2);
+    // Release CI supplies its requested version; normal checkouts verify the tracked development build.
+    $buildVersion = getenv('QUICKPAY_PHAR_BUILD_VERSION') ?: 'dev';
     $result = PharSourceIntegrityVerifier::verify(
         $projectRoot,
         $projectRoot.'/builds/quickpay',
+        $buildVersion,
     );
 
     expect($result['issues'])->toBe([])
         ->and($result['file_count'])->toBeGreaterThan(7000)
         ->and($result['categories'])->toMatchArray([
-            'app' => 31,
+            'app' => 46,
             'bootstrap' => 2,
             'config' => 2,
             'launcher' => 2,

@@ -4,10 +4,13 @@ namespace App\Support;
 
 use InvalidArgumentException;
 
+/**
+ * Parses raw API targets without allowing them to select another origin.
+ */
 final class RawApiPath
 {
     /**
-     * @return array{path: string, query: array<string, mixed>}
+     * @return array{path: string, query: array<array-key, mixed>}
      */
     public static function parse(string $input): array
     {
@@ -26,6 +29,8 @@ final class RawApiPath
         $decoded = $path;
         $maximumDecodings = strlen($path) + 1;
 
+        // Validate every decoding layer so double-encoded traversal, schemes,
+        // hosts, controls, and backslashes cannot become dangerous downstream.
         for ($attempt = 0; $attempt < $maximumDecodings; $attempt++) {
             self::validateDecodedPath($decoded);
             $next = rawurldecode($decoded);

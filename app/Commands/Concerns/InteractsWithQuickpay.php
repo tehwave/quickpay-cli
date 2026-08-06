@@ -11,7 +11,11 @@ use App\Quickpay\QuickpayResponse;
 use App\Support\ResponseBodySanitizer;
 use Closure;
 use InvalidArgumentException;
+use UnexpectedValueException;
 
+/**
+ * Centralizes credential resolution and safe command-level error handling.
+ */
 trait InteractsWithQuickpay
 {
     use WritesErrors;
@@ -34,7 +38,7 @@ trait InteractsWithQuickpay
 
         try {
             return $callback($clients->make($apiKey), $apiKey);
-        } catch (InvalidArgumentException|QuickpayRequestException $exception) {
+        } catch (InvalidArgumentException|QuickpayRequestException|UnexpectedValueException $exception) {
             return $this->failure(ResponseBodySanitizer::terminalLine($exception->getMessage(), $apiKey));
         }
     }

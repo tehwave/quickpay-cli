@@ -4,6 +4,9 @@ namespace App\Support;
 
 use InvalidArgumentException;
 
+/**
+ * Parses custom raw headers while preserving client-owned security headers.
+ */
 final class RawApiHeaderParser
 {
     private const PROTECTED_HEADERS = [

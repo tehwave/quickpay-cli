@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+release_version="${1:-}"
+release_dist="${2:-builds/release}"
+
+if [[ ! "$release_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+    echo "Usage: scripts/build-release MAJOR.MINOR.PATCH [output-directory]" >&2
+    exit 64
+fi
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+project_root="$(cd -- "$script_dir/.." && pwd)"
+
+cd "$project_root"
+
+composer_version="$(composer --version --no-ansi | awk '{print $3}')"
+
+if [[ "$composer_version" != "2.10.2" ]]; then
+    echo "Release builds require Composer 2.10.2; found $composer_version." >&2
+    exit 1
+fi
+
+# Composer's generated metadata is packaged in the PHAR, so install the lock
+# file with the same root identity used by CI before testing or compiling it.
+COMPOSER_ROOT_VERSION=dev-main composer install --no-interaction --no-progress --prefer-dist
+composer validate --strict
+composer audit --locked --abandoned=fail
+
+php quickpay app:build quickpay --build-version="$release_version" --no-interaction
+
+# The integrity test normally expects the tracked development build. Release
+# builds pass their explicit version so the same byte-level test verifies the
+# versioned config embedded by Laravel Zero.
+QUICKPAY_PHAR_BUILD_VERSION="$release_version" composer check
+QUICKPAY_PHAR_BUILD_VERSION="$release_version" composer coverage
+
+test "$(builds/quickpay --version)" = "Quickpay $release_version"
+builds/quickpay list --raw
+php scripts/verify-phar-source.php builds/quickpay "$release_version"
+git diff --check
+
+install -d "$release_dist"
+install -m 0755 builds/quickpay "$release_dist/quickpay"
+
+if command -v sha256sum >/dev/null 2>&1; then
+    (cd "$release_dist" && sha256sum quickpay > quickpay.sha256)
+else
+    (cd "$release_dist" && shasum -a 256 quickpay > quickpay.sha256)
+fi
+
+(cd "$release_dist" && tar -czf "quickpay-$release_version.tar.gz" quickpay quickpay.sha256)
+
+printf 'Built and verified Quickpay %s in %s\n' "$release_version" "$release_dist"

@@ -1,0 +1,190 @@
+name: Build release binary
+
+run-name: Build Quickpay ${{ inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version without the v prefix, for example 1.0.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  COMPOSER_ROOT_VERSION: dev-main
+
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Quickpay ${{ inputs.version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      branch: ${{ steps.release.outputs.branch }}
+    steps:
+      - name: Validate release request
+        id: release
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          SELECTED_REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "Version must be MAJOR.MINOR.PATCH with an optional prerelease suffix." >&2
+            exit 1
+          fi
+
+          if [[ "$SELECTED_REF" != refs/heads/* ]]; then
+            echo "Run this workflow against the branch that should receive the PHAR commit, not a tag." >&2
+            exit 1
+          fi
+
+          if [[ "$SELECTED_REF" == "refs/heads/$DEFAULT_BRANCH" ]]; then
+            echo "Build releases on a release branch, then merge the verified PHAR through a pull request." >&2
+            exit 1
+          fi
+
+          echo "version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "branch=${SELECTED_REF#refs/heads/}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.5'
+          coverage: pcov
+          extensions: sodium
+          tools: composer:2.10.2
+
+      - name: Build and verify release
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: scripts/build-release "$RELEASE_VERSION" "$RUNNER_TEMP/quickpay-release"
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: quickpay-${{ steps.release.outputs.version }}
+          path: |
+            ${{ runner.temp }}/quickpay-release/quickpay
+            ${{ runner.temp }}/quickpay-release/quickpay.sha256
+            ${{ runner.temp }}/quickpay-release/quickpay-${{ steps.release.outputs.version }}.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  attest:
+    name: Attest PHAR provenance
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      # Identity-token permission is isolated from Composer and project code.
+      # This job only downloads and hashes the artifact produced by build.
+      - name: Download verified build
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: quickpay-${{ needs.build.outputs.version }}
+          path: ${{ runner.temp }}/quickpay-release
+
+      - name: Attest PHAR build provenance
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: ${{ runner.temp }}/quickpay-release/quickpay
+
+  commit:
+    name: Commit verified PHAR
+    needs: [build, attest]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      # This is the only job with a write token. It checks out the exact source
+      # commit and never executes repository code or the downloaded PHAR.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Download verified build
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: quickpay-${{ needs.build.outputs.version }}
+          path: ${{ runner.temp }}/quickpay-release
+
+      - name: Commit and push the verified PHAR
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+          TARGET_BRANCH: ${{ needs.build.outputs.branch }}
+        run: |
+          set -euo pipefail
+
+          release_dist="$RUNNER_TEMP/quickpay-release"
+          expected_hash="$(awk 'NR == 1 { print $1 }' "$release_dist/quickpay.sha256")"
+
+          if [[ ! "$expected_hash" =~ ^[0-9a-f]{64}$ ]] || [[ "$(wc -l < "$release_dist/quickpay.sha256")" -ne 1 ]]; then
+            echo "The downloaded checksum file is malformed." >&2
+            exit 1
+          fi
+
+          actual_hash="$(sha256sum "$release_dist/quickpay" | awk '{ print $1 }')"
+
+          if [[ "$actual_hash" != "$expected_hash" ]]; then
+            echo "The downloaded PHAR does not match its build checksum." >&2
+            exit 1
+          fi
+
+          install -m 0755 "$release_dist/quickpay" builds/quickpay
+          status="$(git status --porcelain=v1 --untracked-files=all)"
+
+          if [[ "$status" != " M builds/quickpay" ]]; then
+            echo "Expected the build to change only builds/quickpay; refusing to commit:" >&2
+            printf '%s\n' "$status" >&2
+            exit 1
+          fi
+
+          git add -- builds/quickpay
+
+          if [[ "$(git diff --cached --name-only)" != "builds/quickpay" ]]; then
+            echo "Refusing to commit anything except builds/quickpay." >&2
+            exit 1
+          fi
+
+          git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Build Quickpay $RELEASE_VERSION"
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
+
+          {
+            echo "## Quickpay $RELEASE_VERSION"
+            echo
+            echo "Built and verified the versioned PHAR, then committed only \`builds/quickpay\` to \`$TARGET_BRANCH\`."
+            echo
+            echo "The downloadable artifact contains the PHAR, its SHA-256 checksum, and a tar archive that preserves executable permissions."
+            echo
+            echo "This workflow did not create a pull request, tag, or release; publish to Packagist; or contact Quickpay."
+          } >> "$GITHUB_STEP_SUMMARY"

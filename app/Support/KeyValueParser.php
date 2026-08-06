@@ -4,6 +4,12 @@ namespace App\Support;
 
 use InvalidArgumentException;
 
+/**
+ * Parses repeatable `key=value` options with explicit bracket nesting.
+ *
+ * Conflicting scalar and object shapes are rejected rather than silently
+ * changing an earlier value's type.
+ */
 final class KeyValueParser
 {
     /**

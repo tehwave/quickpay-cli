@@ -1,96 +1,191 @@
 # Quickpay CLI
 
-`quickpay` is a PHP command-line client for the [Quickpay API](https://learn.quickpay.net/tech-talk/api/). It is intended for merchant-side payment inspection and operations: creating payments and payment links, listing and inspecting payments, and carefully capturing, refunding, or cancelling them. It is not a checkout UI, an acquirer configuration tool, or a replacement for the Quickpay Manager.
+[![Quality](https://github.com/tehwave/quickpay-cli/actions/workflows/quality.yml/badge.svg)](https://github.com/tehwave/quickpay-cli/actions/workflows/quality.yml)
+[![PHP 8.4+](https://img.shields.io/badge/PHP-8.4%2B-777BB4.svg)](https://www.php.net/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
-The package is prepared for a future public Composer/Packagist release, but it is **not published yet**: this repository has no remote, release, tag, or Packagist package at present.
+A command-line client for the [Quickpay API](https://learn.quickpay.net/tech-talk/api/).
 
-## Requirements and installation
+Quickpay CLI gives merchant operators and automation a small, inspectable interface for creating payment links, reading payment state, replaying signed callbacks to local development environments, and carrying out explicitly authorized captures, refunds, and cancellations. It preserves machine-readable JSON on stdout, keeps diagnostics on stderr, and puts guardrails around credentials, raw API access, pagination, and payment mutations.
 
-- PHP 8.4 or newer
-- Composer
+This is an independent open-source project. It is not affiliated with or endorsed by Quickpay.
 
-Reproducible PHAR builds use Composer 2.8.9. Continuous integration pins that version explicitly.
+## Installation
 
-### Local development
-
-Clone or enter this checkout, then install its dependencies:
-
-```bash
-composer install
-php quickpay --version
-php quickpay list
-```
-
-The source launcher is `php quickpay`; use it while developing the project.
-
-### Future global installation
-
-After a public release, the intended installation will be:
+Quickpay CLI requires PHP 8.4 or newer. Install it globally with Composer:
 
 ```bash
 composer global require tehwave/quickpay-cli
 quickpay --version
 ```
 
-If `quickpay` is not found, add Composer's global bin directory to `PATH`. Discover its exact location on the machine with:
+If `quickpay` is not found, locate Composer's global binary directory and add it to `PATH`:
 
 ```bash
 composer global config bin-dir --absolute
 ```
 
-Then open a new shell and run `quickpay --version`. Until publication, the global-require command and `skills add tehwave/quickpay-cli` are only future instructions and will not install anything.
+## Quick start
 
-## Authentication and credentials
-
-Before using API commands, a human operator must run the interactive login themselves:
+Authenticate with a Quickpay merchant API key:
 
 ```bash
+quickpay login
+quickpay auth
+```
+
+`login` reads the key through a hidden interactive prompt, validates merchant scope, and stores it in `~/.config/quickpay/config.json`. The directory uses mode `0700`; the file uses `0600`.
+
+Then inspect payments:
+
+```bash
+quickpay payments:list --accepted
+quickpay payments:get 884201
+quickpay payments:get 884201 --json
+```
+
+Use `--json` for scripts and pipelines. Successful JSON stays on stdout; safety messages, prompts, and errors use stderr where necessary.
+
+## Model
+
+- Amounts are integer minor units. `1000` DKK means DKK 10.00.
+- `QUICKPAY_API_KEY` takes precedence over the stored config when it is non-empty.
+- API keys are never accepted as command arguments or custom authorization headers.
+- `payments:create` and `payments:link` create remote resources; run them only with clear operator intent.
+- Capture, refund, cancel, and non-`GET` raw requests show a summary and require confirmation.
+- Non-interactive mutations require `--yes`. The flag bypasses the prompt; it does not replace human authorization.
+- Payment mutations fetch current payment context before confirmation.
+- Mutations are never retried automatically.
+- Pagination follows only bounded, cycle-safe links on the exact Quickpay HTTPS origin.
+- Callback replay/watch signs the sanitized bytes it forwards and never sends Quickpay API authentication to the destination.
+
+Before a capture, refund, or cancellation, inspect the payment and verify its ID, order, currency, state, accepted status, balance, and requested amount:
+
+```bash
+quickpay payments:get 884201 --json
+quickpay payments:capture 884201 2500 --yes --json
+```
+
+Never infer permission to mutate a payment from permission to read it.
+
+## Commands
+
+### Authentication
+
+```text
 quickpay login
 quickpay auth
 quickpay logout
 ```
 
-`login` asks for a merchant API key without echoing it, checks it against Quickpay, and stores it at `~/.config/quickpay/config.json`. The directory is created with mode `0700` and the config file with mode `0600`. `auth` reports the active credential source, API endpoint/version, and scope; it never prints the key. `logout` removes only the stored config.
+`logout` removes only the stored config file. If `QUICKPAY_API_KEY` is set, the environment credential remains active until it is unset.
 
-Credential precedence is `QUICKPAY_API_KEY` (when non-empty), then the config file. An environment key remains active after `logout`; unset it to fully log out. Use an environment variable only through a secret manager or the process environment—never put a real key in shell history, command arguments, scripts, logs, screenshots, issue text, or committed files. Do not use `--header Authorization:…` either.
+### Create and inspect payments
 
-## Output, amounts, and safety
+```text
+quickpay payments:create <order-id> [currency=DKK]
+  [--field=key=value]... [--json]
 
-Commands show concise human-readable tables/details by default. Add `--json` for the machine-readable response form; it is the preferred mode for automation. Mutation safety messages may still be written to stderr so stdout remains usable as JSON.
+quickpay payments:list [--accepted] [--state=value] [--order-id=value]
+  [--created-after=value] [--created-before=value] [--page-size=20]
+  [--all] [--max-pages=100] [--json]
 
-All amounts are integers in the currency's smallest unit. For Danish kroner, `1000` means DKK 10.00—not DKK 1,000.00.
+quickpay payments:get <id> [--operations-size=value] [--json]
 
-Read commands are safe to automate. `payments:create` and `payments:link` create remote resources, so run them only with clear operator intent. `payments:capture`, `payments:refund`, `payments:cancel`, and every non-`GET` raw `api` request print a summary and request confirmation when interactive. In a non-interactive run they require `--yes`; use that flag only after explicit authorization of the exact operation, payment, and amount. The mutation commands also fetch the payment before acting, but inspect it yourself first for an auditable workflow.
-
-## Payment commands
-
-Every payment command accepts `--json` where shown below.
-
-| Command | Arguments and options |
-| --- | --- |
-| `payments:create` | `quickpay payments:create <order-id> [currency=DKK] [--field=key=value]... [--json]` |
-| `payments:list` | `quickpay payments:list [--accepted] [--state=value] [--order-id=value] [--created-after=value] [--created-before=value] [--page-size=20] [--all] [--max-pages=100] [--json]` |
-| `payments:get` | `quickpay payments:get <id> [--operations-size=value] [--json]` |
-| `payments:link` | `quickpay payments:link <id> <amount> [--continue-url=url] [--cancel-url=url] [--callback-url=url] [--language=value] [--payment-methods=value] [--auto-capture] [--field=key=value]... [--json]` |
-| `payments:capture` | `quickpay payments:capture <id> <amount> [--synchronized] [--callback-url=url] [--yes] [--json]` |
-| `payments:refund` | `quickpay payments:refund <id> <amount> [--vat-rate=value] [--synchronized] [--callback-url=url] [--yes] [--json]` |
-| `payments:cancel` | `quickpay payments:cancel <id> [--synchronized] [--callback-url=url] [--yes] [--json]` |
-
-`order-id` must be 4–20 characters. `--field=key=value` passes additional Quickpay request fields; named options win where both address the same value. Use `--all` to follow list pagination, bounded by `--max-pages`. `--operations-size=0` is allowed when an operation list is not needed.
-
-A safe capture sequence, after the human has authorized it, is:
-
-```bash
-quickpay payments:get 884201 --json
-# Verify id, order, currency, state, accepted status, balance, and authorized amount.
-quickpay payments:capture 884201 2500 --yes --json
+quickpay payments:link <id> <amount>
+  [--continue-url=url] [--cancel-url=url] [--callback-url=url]
+  [--language=value] [--payment-methods=value] [--auto-capture]
+  [--field=key=value]... [--json]
 ```
 
-Use the same inspect-first process for refunds and cancellations. Never infer permission to capture, refund, cancel, create, or link a payment from permission to read it.
+`order-id` must contain 4–20 characters. Additional `--field` values support nested bracket notation such as `basket[0][qty]=2`; named arguments and options remain authoritative over conflicting fields.
 
-## Raw API access
+Use `--operations-size=0` when the payment's operation list is not needed.
+Human-readable operation tables include Quickpay's callback success, response
+code, and timestamp when those fields are present.
 
-Use raw access only for API endpoints not covered above:
+### Mutate payments
+
+```text
+quickpay payments:capture <id> <amount>
+  [--synchronized] [--callback-url=url] [--yes] [--json]
+
+quickpay payments:refund <id> <amount>
+  [--vat-rate=value] [--synchronized] [--callback-url=url]
+  [--yes] [--json]
+
+quickpay payments:cancel <id>
+  [--synchronized] [--callback-url=url] [--yes] [--json]
+```
+
+### Develop callbacks locally
+
+Quickpay cannot deliver a callback directly to a server that only exists on
+your laptop. The `callbacks` commands bridge that gap by fetching the current
+payment from Quickpay, constructing the documented callback headers and HMAC,
+and POSTing the signed payment JSON to an explicit HTTP or HTTPS destination.
+
+Replay the current state once while developing a callback handler:
+
+```bash
+quickpay callbacks:replay 884201 --to=http://127.0.0.1:8000/quickpay/callback
+quickpay callbacks:replay --order-id=demo123 \
+  --to=http://127.0.0.1:8000/quickpay/callback --json
+```
+
+Watch for future operations during a checkout flow:
+
+```bash
+quickpay callbacks:watch --order-id=demo123 \
+  --to=http://127.0.0.1:8000/quickpay/callback
+quickpay callbacks:watch 884201 \
+  --to=http://127.0.0.1:8000/quickpay/callback --interval=2
+```
+
+Exactly one payment selector is required. `--interval` accepts whole seconds
+from 1 through 60. Watch is a foreground, human-readable stream; press Ctrl-C
+to stop it. It baselines operations already present when an existing payment is
+selected. If an order does not exist yet, every operation present when its
+payment first appears is forwarded.
+
+Every detected operation produces one callback in operation order. If multiple
+operations appear between polls, each POST necessarily contains the same latest
+payment snapshot; the command warns when this happens. A failed delivery is
+retried with the exact same captured body and signature before later operations
+are sent. `2xx`, `302`, and `303` are successful; `301` and `307` are followed
+up to five times while preserving POST, headers, and body. Redirects from HTTPS
+to plaintext HTTP are refused.
+
+The signing key comes from a non-empty `QUICKPAY_PRIVATE_KEY`, otherwise the CLI
+retrieves `/account/private-key` using the active API key. It remains in memory
+only. The callback destination receives no Quickpay `Authorization` or
+`Accept-Version` header, local response bodies are never printed, TLS
+verification stays enabled, and there is no `--insecure` option.
+
+These commands reproduce Quickpay's callback envelope for the current resource;
+they cannot reproduce a historical resource snapshot, original source IP, or
+Quickpay's delivery timing. They are a foreground development aid, not a daemon
+or durable webhook relay.
+
+The existing `--callback-url` option on payment links and mutations has a
+different purpose: it asks Quickpay's servers to deliver the real callback.
+Therefore a localhost or otherwise private-only URL passed through
+`--callback-url` is not reachable by Quickpay. Use `callbacks:watch` locally or
+expose the handler through a tunnel you trust.
+
+Complete forms:
+
+```text
+quickpay callbacks:replay [<payment-id>] --to=url
+  [--order-id=value] [--json]
+
+quickpay callbacks:watch [<payment-id>] --to=url
+  [--order-id=value] [--interval=2]
+```
+
+### Raw API access
+
+Use raw access for Quickpay v10 endpoints not covered by a first-class command:
 
 ```bash
 quickpay api GET '/payments?order_id=demo123' --json
@@ -101,62 +196,67 @@ quickpay api GET /ping --header='X-Request-Id: demo123' --json
 The complete form is:
 
 ```text
-quickpay api <GET|POST|PUT|PATCH|DELETE> <relative-path> \
-  [--query=key=value]... [--data=key=value]... [--data-json='{}'] \
+quickpay api <GET|POST|PUT|PATCH|DELETE> <relative-path>
+  [--query=key=value]... [--data=key=value]... [--data-json='{}']
   [--header='name:value']... [--yes] [--json]
 ```
 
-Paths must be safe relative paths under `api.quickpay.net`; URLs, hosts, schemes, `..`, backslashes, and fragment-like paths are rejected. `--data` and `--data-json` are mutually exclusive. The client owns authentication and API versioning, so `Authorization`, `Host`, and `Accept-Version` headers cannot be overridden. Non-`GET` raw requests are mutations: inspect first, obtain explicit authorization, then use `--yes` only for an unattended execution.
+Raw paths must stay relative to `api.quickpay.net`. Full URLs, hosts, schemes, traversal segments, backslashes, userinfo, controls, and fragments are rejected. `--data` and `--data-json` are mutually exclusive. The client owns `Authorization`, `Host`, `Accept`, `Accept-Version`, and `Content-Type`; callers cannot override them.
 
-## Test payments and documentation
+Every non-`GET` raw request is treated as a mutation.
 
-Use Quickpay's test transactions during integration work and make the receiving system recognise them from the callback. The current official list of test cards, mobile numbers, and expected outcomes is [Quickpay test data](https://learn.quickpay.net/tech-talk/appendixes/test/). Test transactions can be disabled per merchant in Quickpay Manager, so verify the merchant's integration settings before relying on them.
+## Test transactions
 
-The CLI currently targets Quickpay API version `v10`. Consult the [API reference](https://learn.quickpay.net/tech-talk/api/) and [Quickpay technical documentation](https://learn.quickpay.net/tech-talk/) for endpoint and payment-flow details.
+Use Quickpay's [official test data](https://learn.quickpay.net/tech-talk/appendixes/test/) for integration work, and make the receiving system recognize test callbacks. Test transactions can be disabled per merchant in Quickpay Manager.
 
-## Development, build, and release readiness
+## Development
 
-Run the local quality checks with:
+The source checkout uses Laravel Zero 12, Pest 4, Larastan/PHPStan, Pint, and Box. Composer 2.10.2 is pinned for reproducible PHAR builds.
 
 ```bash
-composer test
-composer analyse
-composer format:test
-composer format
+composer install
 composer check
+composer coverage
+composer audit --locked --abandoned=fail
 ```
 
-Build the distributable PHAR and smoke-test it with:
+The full test suite uses HTTP fakes and does not contact Quickpay.
+
+Build and verify the tracked development PHAR:
 
 ```bash
 composer build
 builds/quickpay --version
-builds/quickpay list
+builds/quickpay list --raw
 php scripts/verify-phar-source.php builds/quickpay dev
 ```
 
-`composer build` first runs a fresh lock-file install with `COMPOSER_ROOT_VERSION=dev-main`, then invokes Box. This keeps Composer's generated root package identity stable; use Composer 2.8.9 for the same generated dependency metadata as continuous integration.
+See [CONTRIBUTING.md](CONTRIBUTING.md) before changing commands or security behavior. Maintainers should follow [docs/RELEASING.md](docs/RELEASING.md) for versioned releases.
 
-`composer.json` exposes `builds/quickpay` as the Composer bin target. That built executable is intentionally tracked so a future Composer package archive contains the file its bin entry references. Other build artifacts remain ignored.
+## Agent skill
 
-The integrity verifier derives the complete expected archive from `box.json`, the checkout, `composer.json`, `composer.lock`, and the installed Box compiler. It checks the exact packaged file set across application, bootstrap, configuration, launcher, Composer, vendor, and Box runtime files, plus the executable stub. PHP is compared byte-for-byte after replaying the exact installed Box PHP compactor. JSON and all other files are compared byte-for-byte without semantic normalization, which preserves object/list distinctions and integers larger than 64 bits. Only proven Composer install volatility is normalized: this project's generated root identity, Composer's generated initializer suffix, and Pest's plugin ordering. Root and dependency class-to-path mappings remain exact. Box ignores hidden development metadata inside configured directories; no executable PHP or security metadata is otherwise excluded from verification.
-
-There is no self-update command. After publication, updates will use Composer, for example `composer global update tehwave/quickpay-cli`.
-
-### Future release procedure — not yet performed
-
-1. Choose and set the intended release version.
-2. With Composer 2.8.9, run `COMPOSER_ROOT_VERSION=dev-main composer install --no-interaction --no-progress --prefer-dist`, then `composer check`.
-3. Rebuild the tracked PHAR with that exact version, for example `php quickpay app:build quickpay --build-version=1.2.3 --no-interaction`; do not tag a release built as `dev`.
-4. Run `builds/quickpay --version`, `builds/quickpay list`, and `php scripts/verify-phar-source.php builds/quickpay 1.2.3`, then review the diff and verify no credential/config file is included.
-5. Commit the source and rebuilt `builds/quickpay`, tag the verified commit, then create the GitHub release and publish the matching Packagist package.
-
-Only after public publication will the agent reference skill be installable with:
+The repository includes a conservative Quickpay agent skill for coding agents:
 
 ```bash
 skills add tehwave/quickpay-cli
 ```
 
+The skill does not grant mutation authority; the human operator must still authorize the exact operation, payment, and amount.
+
+## Security
+
+Please read [SECURITY.md](SECURITY.md) before reporting a vulnerability. Never include API keys, authorization headers, real payment payloads, or merchant data in an issue.
+
+GitHub release assets are published as immutable releases with build provenance.
+After downloading a PHAR named `quickpay`, verify both attestations before
+running it:
+
+```bash
+gh release verify v1.0.0 --repo tehwave/quickpay-cli
+gh release verify-asset v1.0.0 quickpay --repo tehwave/quickpay-cli
+gh attestation verify quickpay --repo tehwave/quickpay-cli
+```
+
 ## License
 
-MIT. See [LICENSE.md](LICENSE.md).
+Quickpay CLI is open-source software licensed under the [MIT License](LICENSE.md).

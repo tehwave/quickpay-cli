@@ -1,10 +1,19 @@
 <?php
 
 declare(strict_types=1);
+
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Contracts\Foundation\Application;
 
+/**
+ * Reconstructs Box's expected archive independently and compares every byte.
+ *
+ * The tracked PHAR is executable release input, not an opaque build artifact.
+ * Verification therefore derives its manifest from the checkout and installed
+ * compiler; trusting file names or hashes stored inside the target would let a
+ * compromised archive define the evidence used to approve itself.
+ */
 final class PharSourceIntegrityVerifier
 {
     private const BOX_RUNTIME_PREFIX = '.box/';
@@ -175,20 +184,30 @@ final class PharSourceIntegrityVerifier
         string $path,
         string $contents,
     ): string {
-        foreach (self::boxCompactors($projectRoot, $box['compactors']) as $compactor) {
-            $contents = $compactor->compact($path, $contents);
+        foreach (self::boxCompactors($projectRoot, $box['compactors'] ?? null) as $compact) {
+            $contents = $compact($path, $contents);
         }
 
         return $contents;
     }
 
     /**
-     * @param  array<int, string>  $configured
-     * @return array<int, object{compact: callable(string, string): string}>
+     * @return array<int, Closure(string, string): string>
      */
-    private static function boxCompactors(string $projectRoot, array $configured): array
+    private static function boxCompactors(string $projectRoot, mixed $configured): array
     {
+        /** @var array<string, array<int, Closure(string, string): string>> $cache */
         static $cache = [];
+
+        if (! is_array($configured) || ! array_is_list($configured)) {
+            throw new RuntimeException('Configured Box compactors must be a list of class names.');
+        }
+
+        foreach ($configured as $class) {
+            if (! is_string($class)) {
+                throw new RuntimeException('Configured Box compactor class names must be strings.');
+            }
+        }
 
         $context = self::boxContext($projectRoot);
         $cacheKey = $context['hash'].'|'.implode('|', $configured);
@@ -200,12 +219,13 @@ final class PharSourceIntegrityVerifier
         $compactors = [];
 
         foreach ($configured as $class) {
-            if (! is_string($class) || ! class_exists($class)) {
-                throw new RuntimeException("Configured Box compactor is unavailable: {$class}");
-            }
-
             if ($class === 'KevinGH\\Box\\Compactor\\Php') {
                 $configurationClass = $context['namespace'].'\\KevinGH\\Box\\Configuration\\Configuration';
+
+                if (! class_exists($configurationClass)) {
+                    throw new RuntimeException('The Box compactor configuration is unavailable.');
+                }
+
                 $constant = (new ReflectionClass($configurationClass))
                     ->getReflectionConstant('DEFAULT_IGNORED_ANNOTATIONS');
 
@@ -213,12 +233,30 @@ final class PharSourceIntegrityVerifier
                     throw new RuntimeException('Unable to read the Box PHP compactor annotation configuration.');
                 }
 
-                $compactors[] = $class::create($ignored);
+                $factory = [$class, 'create'];
 
-                continue;
+                if (! is_callable($factory)) {
+                    throw new RuntimeException("Configured Box compactor is unavailable: {$class}");
+                }
+
+                $compactor = $factory($ignored);
+            } else {
+                if (! class_exists($class)) {
+                    throw new RuntimeException("Configured Box compactor is unavailable: {$class}");
+                }
+
+                $compactor = new $class;
             }
 
-            $compactors[] = new $class;
+            $compact = [$compactor, 'compact'];
+
+            if (! is_callable($compact)) {
+                throw new RuntimeException("Configured Box compactor cannot compact files: {$class}");
+            }
+
+            // Convert dynamically loaded Box objects to a stable local type so
+            // the rest of the verifier does not depend on Box's private prefix.
+            $compactors[] = Closure::fromCallable($compact);
         }
 
         return $cache[$cacheKey] = $compactors;
@@ -472,7 +510,7 @@ final class PharSourceIntegrityVerifier
     private static function collectExtensions(array $constraints, ?string $source, array &$target): void
     {
         foreach (array_keys($constraints) as $package) {
-            if (! is_string($package) || ! str_starts_with($package, 'ext-')) {
+            if (! str_starts_with($package, 'ext-')) {
                 continue;
             }
 
@@ -588,6 +626,8 @@ final class PharSourceIntegrityVerifier
 
     private static function normalizeProvenComposerVolatility(string $path, string $contents): string
     {
+        // Keep this allow-list deliberately narrow. Normalizing arbitrary
+        // metadata would make the verifier blind to meaningful package drift.
         if ($path === 'vendor/composer/installed.php') {
             $contents = self::normalizeComposerInstalledRootIdentity($contents);
         }

@@ -4,6 +4,9 @@ namespace App\Quickpay;
 
 use Illuminate\Http\Client\Factory;
 
+/**
+ * Creates credential-scoped clients from Laravel's shared HTTP factory.
+ */
 final readonly class QuickpayClientFactory
 {
     public function __construct(private Factory $http) {}

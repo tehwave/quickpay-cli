@@ -2,6 +2,12 @@
 
 namespace App\Credentials;
 
+/**
+ * Removes credentials from literal, Basic-auth, and URL-encoded output.
+ *
+ * Matching is deliberately byte-oriented: API responses are untrusted and may
+ * contain mixed or partial encodings that cannot safely be normalized first.
+ */
 final class CredentialRedactor
 {
     public static function redact(string $value, string $apiKey): string
@@ -12,11 +18,14 @@ final class CredentialRedactor
 
         $redacted = self::replaceSensitiveMatches($value, $apiKey, self::replacement($apiKey));
 
+        // Replacements can join surrounding bytes into a fresh match. Repeat
+        // until the result is demonstrably safe instead of assuming one pass.
         while (self::containsSensitiveValue($redacted, $apiKey)) {
             $previous = $redacted;
             $redacted = self::replaceSensitiveMatches($redacted, $apiKey, '');
 
             if ($redacted === $previous) {
+                // An empty result is safer than returning an unredactable key.
                 return '';
             }
         }
@@ -31,6 +40,7 @@ final class CredentialRedactor
 
     private static function replacement(string $apiKey): string
     {
+        // Even a placeholder can collide when a credential is unusually short.
         foreach (['[redacted]', '[credential removed]'] as $candidate) {
             if (! self::containsSensitiveValue($candidate, $apiKey)) {
                 return $candidate;
@@ -65,6 +75,8 @@ final class CredentialRedactor
         $credentials = [$apiKey, base64_encode(':'.$apiKey)];
         $matches = self::literalMatches($value, $credentials);
 
+        // Check RFC 3986 percent encoding and form encoding. Tracking source
+        // spans lets us remove encoded bytes without rewriting unrelated text.
         foreach ([false, true] as $plusAsSpace) {
             [$normalized, $spans] = self::normalizePercentEncoding($value, $plusAsSpace);
 
@@ -115,11 +127,15 @@ final class CredentialRedactor
             if ($value[$index] === '%'
                 && $index + 2 < $length
                 && ctype_xdigit($value[$index + 1].$value[$index + 2])) {
-                $normalized .= chr((int) hexdec($value[$index + 1].$value[$index + 2]));
-                $spans[] = [$index, $index + 3];
-                $index += 2;
+                $byte = hex2bin($value[$index + 1].$value[$index + 2]);
 
-                continue;
+                if ($byte !== false) {
+                    $normalized .= $byte;
+                    $spans[] = [$index, $index + 3];
+                    $index += 2;
+
+                    continue;
+                }
             }
 
             $normalized .= $plusAsSpace && $value[$index] === '+' ? ' ' : $value[$index];

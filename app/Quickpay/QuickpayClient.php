@@ -8,6 +8,13 @@ use Illuminate\Http\Client\HttpClientException;
 use Illuminate\Http\Client\PendingRequest;
 use InvalidArgumentException;
 
+/**
+ * Owns every HTTP invariant required by the Quickpay API boundary.
+ *
+ * Callers provide relative paths and business payloads only. Authentication,
+ * origin, API version, JSON headers, and timeout remain centralized so raw API
+ * access cannot weaken the same guarantees used by first-class commands.
+ */
 final readonly class QuickpayClient
 {
     public const BASE_URL = 'https://api.quickpay.net';
@@ -20,7 +27,7 @@ final readonly class QuickpayClient
     ) {}
 
     /**
-     * @param  array<string, mixed>  $query
+     * @param  array<array-key, mixed>  $query
      * @param  array<string, mixed>  $data
      * @param  array<string, string>  $headers
      */
@@ -30,7 +37,7 @@ final readonly class QuickpayClient
     }
 
     /**
-     * @param  array<string, mixed>  $query
+     * @param  array<array-key, mixed>  $query
      * @param  array<string, mixed>  $data
      * @param  array<string, string>  $headers
      */
@@ -40,7 +47,7 @@ final readonly class QuickpayClient
     }
 
     /**
-     * @param  array<string, mixed>  $query
+     * @param  array<array-key, mixed>  $query
      * @param  array<string, mixed>  $data
      * @param  array<string, string>  $headers
      */
@@ -50,7 +57,7 @@ final readonly class QuickpayClient
     }
 
     /**
-     * @param  array<string, mixed>  $query
+     * @param  array<array-key, mixed>  $query
      * @param  array<string, mixed>  $data
      * @param  array<string, string>  $headers
      */
@@ -60,7 +67,7 @@ final readonly class QuickpayClient
     }
 
     /**
-     * @param  array<string, mixed>  $query
+     * @param  array<array-key, mixed>  $query
      * @param  array<string, mixed>  $data
      * @param  array<string, string>  $headers
      */
@@ -86,7 +93,7 @@ final readonly class QuickpayClient
     }
 
     /**
-     * @param  array<string, mixed>  $query
+     * @param  array<array-key, mixed>  $query
      * @param  array<string, mixed>  $data
      * @param  array<string, string>  $headers
      */
@@ -102,7 +109,7 @@ final readonly class QuickpayClient
     }
 
     /**
-     * @param  array<string, mixed>  $query
+     * @param  array<array-key, mixed>  $query
      * @param  array<string, string>  $headers
      */
     public function raw(
@@ -121,7 +128,7 @@ final readonly class QuickpayClient
     }
 
     /**
-     * @param  array<string, mixed>  $query
+     * @param  array<array-key, mixed>  $query
      * @param  array<string, mixed>  $data
      * @param  array<string, string>  $headers
      */
@@ -145,6 +152,8 @@ final readonly class QuickpayClient
         }
 
         try {
+            // No retry middleware is attached. Replaying capture, refund,
+            // cancel, or an arbitrary raw mutation would be unsafe.
             return QuickpayResponse::fromLaravel($request->send(strtoupper($method), $url, $options));
         } catch (HttpClientException) {
             throw new QuickpayRequestException('Unable to connect to Quickpay. Please check your network connection and try again.');
@@ -154,6 +163,8 @@ final readonly class QuickpayClient
     /** @param array<string, string> $headers */
     private function pendingRequest(array $headers): PendingRequest
     {
+        // These headers define the trust boundary and must remain client-owned,
+        // including when callers use the flexible raw API command.
         foreach (array_keys($headers) as $name) {
             if (in_array(strtolower($name), ['authorization', 'host', 'accept', 'accept-version', 'content-type'], true)) {
                 throw new InvalidArgumentException("The {$name} header cannot be overridden.");

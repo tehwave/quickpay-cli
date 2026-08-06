@@ -4,7 +4,7 @@
 
 This is a PHP 8.4+ command-line client for Quickpay, built with Laravel Zero 12. It targets Quickpay API v10 and ships as a tracked PHAR in `builds/quickpay`.
 
-Use `php quickpay` when running the application from source. Use Composer 2.8.9 for reproducible PHAR work. See `README.md` for the public command reference and `skills/quickpay/SKILL.md` for the agent-facing usage guide.
+Use `php quickpay` when running the application from source. Use Composer 2.10.2 for reproducible PHAR work. See `README.md` for the public command reference and `skills/quickpay/SKILL.md` for the agent-facing usage guide.
 
 ## Structure
 

@@ -4,7 +4,7 @@ namespace App\Commands;
 
 class PaymentsCancelCommand extends PaymentMutationCommand
 {
-    protected $signature = 'payments:cancel {id} {--synchronized} {--callback-url=} {--yes} {--json}';
+    protected $signature = 'payments:cancel {id} {--synchronized} {--callback-url= : Callback URL for Quickpay servers (not localhost)} {--yes} {--json}';
 
     protected $description = 'Cancel a Quickpay payment';
 

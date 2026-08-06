@@ -5,6 +5,13 @@ namespace App\Support;
 use InvalidArgumentException;
 use ValueError;
 
+/**
+ * Extracts a validated Quickpay `rel="next"` pagination target.
+ *
+ * Link headers are remote input. Parsing relation tokens exactly and reducing
+ * the URL to a relative target prevents suffix hosts, userinfo, ports, or
+ * fragments from escaping the client-owned Quickpay origin.
+ */
 final class LinkHeaderParser
 {
     public static function next(?string $header): ?string

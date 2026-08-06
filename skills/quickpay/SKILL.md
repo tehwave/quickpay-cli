@@ -1,6 +1,6 @@
 ---
 name: quickpay
-description: Use when an agent needs to work with Quickpay payments, payment links, capture, refund, cancel, authentication, or safe raw API access through the Quickpay CLI.
+description: Use when an agent needs to work with Quickpay payments, payment links, callbacks, capture, refund, cancel, authentication, or safe raw API access through the Quickpay CLI.
 license: MIT
 metadata:
   author: Peter Chr. Jorgensen
@@ -10,7 +10,7 @@ metadata:
 
 # Quickpay CLI
 
-Run `quickpay --version` before use. This skill supports the local CLI; `skills add tehwave/quickpay-cli` becomes available only after the project is publicly published.
+Run `quickpay --version` before use. Installation and the complete human-facing command reference are documented in the project README.
 
 ## Credentials
 
@@ -52,11 +52,31 @@ quickpay payments:capture <id> <amount> [--synchronized] [--callback-url=url] [-
 quickpay payments:refund <id> <amount> [--vat-rate=value] [--synchronized]
   [--callback-url=url] [--yes] [--json]
 quickpay payments:cancel <id> [--synchronized] [--callback-url=url] [--yes] [--json]
+quickpay callbacks:replay [<payment-id>] --to=url [--order-id=value] [--json]
+quickpay callbacks:watch [<payment-id>] --to=url [--order-id=value] [--interval=2]
 quickpay api <GET|POST|PUT|PATCH|DELETE> <path> [--query=key=value]...
   [--data=key=value]... [--data-json='{}'] [--header='name:value']... [--yes] [--json]
 ```
 
 `payments:create` and `payments:link` also alter remote state but do not expose `--yes`; require explicit authorization before using them. `--data` and `--data-json` cannot be combined.
+
+## Local callback development
+
+Use `callbacks:replay` to send the current payment resource once. Use
+`callbacks:watch` as a foreground stream for operations that appear after the
+watch starts. Provide exactly one selector: a payment ID or `--order-id`.
+
+The `--to` URL is an outbound POST destination and may receive merchant or
+transaction data. Require the user to provide or explicitly approve the exact
+destination before running either command. Do not invent a public endpoint,
+silently start a tunnel, or substitute `--callback-url`: that option tells
+Quickpay's servers where to deliver and localhost is not reachable from them.
+
+Watch has no JSON mode. It retries a failed captured callback before later
+operations and runs until the user stops it with Ctrl-C. `QUICKPAY_PRIVATE_KEY`
+is an optional sensitive environment override; never ask the user to paste it
+into chat or place it in a command argument. Without it, the CLI retrieves the
+key through the authenticated API and retains it only in memory.
 
 ## Raw API guardrails
 

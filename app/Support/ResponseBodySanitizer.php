@@ -7,6 +7,9 @@ use InvalidArgumentException;
 use JsonException;
 use stdClass;
 
+/**
+ * Makes remote response bodies safe for JSON pipelines and interactive terminals.
+ */
 final class ResponseBodySanitizer
 {
     public static function json(string $body, string $apiKey): string
@@ -21,6 +24,8 @@ final class ResponseBodySanitizer
         $safe = self::redactJsonValue($decoded, $apiKey, $changed);
         $rawExposesCredential = CredentialRedactor::containsSensitiveValue($body, $apiKey);
 
+        // Preserve byte-for-byte API JSON unless redaction is necessary. CLI
+        // consumers may depend on number spelling, key order, or whitespace.
         if (! $changed && ! $rawExposesCredential) {
             return $body;
         }
@@ -52,6 +57,8 @@ final class ResponseBodySanitizer
 
     private static function safeFallbackJson(string $apiKey): string
     {
+        // A very short credential can collide with JSON literals such as
+        // `0` or `null`; choose a valid JSON value proven not to expose it.
         foreach ([null, false, 0, [], new stdClass] as $fallback) {
             $encoded = self::encodeJson($fallback);
 

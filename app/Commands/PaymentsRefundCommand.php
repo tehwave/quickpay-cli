@@ -4,7 +4,7 @@ namespace App\Commands;
 
 class PaymentsRefundCommand extends PaymentMutationCommand
 {
-    protected $signature = 'payments:refund {id} {amount} {--vat-rate=} {--synchronized} {--callback-url=} {--yes} {--json}';
+    protected $signature = 'payments:refund {id} {amount} {--vat-rate=} {--synchronized} {--callback-url= : Callback URL for Quickpay servers (not localhost)} {--yes} {--json}';
 
     protected $description = 'Refund a Quickpay payment';
 

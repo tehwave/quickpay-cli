@@ -28,7 +28,7 @@ class PaymentsLinkCommand extends Command
     protected $signature = 'payments:link {id} {amount}
         {--continue-url=}
         {--cancel-url=}
-        {--callback-url=}
+        {--callback-url= : Callback URL for Quickpay servers (not localhost)}
         {--language=}
         {--payment-methods=}
         {--auto-capture}

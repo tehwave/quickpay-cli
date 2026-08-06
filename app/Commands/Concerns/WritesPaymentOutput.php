@@ -8,6 +8,12 @@ use InvalidArgumentException;
 use JsonException;
 use stdClass;
 
+/**
+ * Validates Quickpay response shapes before rendering payment output.
+ *
+ * Shape validation happens before stdout writes so automation never receives
+ * a partial JSON document that appears successful.
+ */
 trait WritesPaymentOutput
 {
     protected function writeOriginalJson(QuickpayResponse $response, string $apiKey): void
@@ -114,10 +120,11 @@ trait WritesPaymentOutput
             $this->paymentValue($operation['pending'] ?? null, $apiKey),
             $this->statusValue($operation, 'qp', $apiKey),
             $this->statusValue($operation, 'aq', $apiKey),
+            $this->callbackValue($operation, $apiKey),
             $this->paymentValue($operation['created_at'] ?? null, $apiKey),
-        ] : ['-', '-', '-', '-', '-', '-', '-'], $operations);
+        ] : ['-', '-', '-', '-', '-', '-', '-', '-'], $operations);
 
-        $this->table(['ID', 'Type', 'Amount', 'Pending', 'Quickpay status', 'Acquirer status', 'Created'], $rows);
+        $this->table(['ID', 'Type', 'Amount', 'Pending', 'Quickpay status', 'Acquirer status', 'Callback', 'Created'], $rows);
     }
 
     protected function paymentValue(mixed $value, string $apiKey): string
@@ -149,6 +156,23 @@ trait WritesPaymentOutput
         ], fn (?string $part): bool => $part !== null && $part !== '');
 
         return $this->safeTerminalText($parts === [] ? '-' : implode(' ', $parts), $apiKey);
+    }
+
+    /** @param array<string, mixed> $operation */
+    private function callbackValue(array $operation, string $apiKey): string
+    {
+        $success = $operation['callback_success'] ?? null;
+        $parts = array_filter([
+            is_bool($success) ? ($success ? 'yes' : 'no') : null,
+            isset($operation['callback_response_code']) && is_scalar($operation['callback_response_code'])
+                ? (string) $operation['callback_response_code']
+                : null,
+            isset($operation['callback_at']) && is_scalar($operation['callback_at'])
+                ? (string) $operation['callback_at']
+                : null,
+        ], fn (?string $part): bool => $part !== null && $part !== '');
+
+        return $this->safeTerminalText($parts === [] ? '-' : implode(' / ', $parts), $apiKey);
     }
 
     /** @return array{0: mixed, 1: mixed} */

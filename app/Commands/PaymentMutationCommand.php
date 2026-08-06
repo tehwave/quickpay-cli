@@ -14,6 +14,12 @@ use Illuminate\Console\OutputStyle;
 use InvalidArgumentException;
 use Symfony\Component\Console\Output\OutputInterface;
 
+/**
+ * Executes payment mutations behind a shared inspect-and-confirm workflow.
+ *
+ * Fetching current payment context before confirmation gives the operator the
+ * identity, currency, state, and balance needed to verify a destructive action.
+ */
 abstract class PaymentMutationCommand extends Command
 {
     use InteractsWithQuickpay;
@@ -67,6 +73,8 @@ abstract class PaymentMutationCommand extends Command
             $this->jsonObject($response, 'Quickpay returned an invalid payment mutation response.');
 
             if ($this->option('json')) {
+                // The response is validated before stdout is touched so a
+                // failed mutation can never emit partial "successful" JSON.
                 $this->getOutput()->write($safeJson);
 
                 return self::SUCCESS;
@@ -134,6 +142,8 @@ abstract class PaymentMutationCommand extends Command
 
     private function writeSafetyLine(string $message): void
     {
+        // JSON mode reserves stdout for the response document. Human safety
+        // context and prompts therefore move to stderr.
         $output = $this->option('json')
             ? $this->getOutput()->getErrorStyle()
             : $this->getOutput();

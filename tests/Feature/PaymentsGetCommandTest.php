@@ -55,6 +55,9 @@ it('renders payment details and an operations table', function () {
             'qp_status_msg' => 'Approved',
             'aq_status_code' => '000',
             'aq_status_msg' => 'OK',
+            'callback_success' => true,
+            'callback_response_code' => '204',
+            'callback_at' => '2026-07-24T09:01:01Z',
             'created_at' => '2026-07-24T09:01:00Z',
         ]],
     ])]);
@@ -69,7 +72,9 @@ it('renders payment details and an operations table', function () {
         ->toContain('Operations')
         ->toContain('authorize')
         ->toContain('20000 Approved')
-        ->toContain('000 OK');
+        ->toContain('000 OK')
+        ->toContain('Callback')
+        ->toContain('yes / 204 / 2026-07-24T09:01:01Z');
 });
 
 it('sanitizes credentials and terminal controls in get json and human output', function () {

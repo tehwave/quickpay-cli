@@ -4,6 +4,12 @@ namespace App\Quickpay;
 
 use Illuminate\Http\Client\Response;
 
+/**
+ * Retains both exact response bytes and a convenient decoded representation.
+ *
+ * Exact bytes are required for faithful `--json` output; decoded data is used
+ * only for validation and human-readable summaries.
+ */
 final readonly class QuickpayResponse
 {
     /**

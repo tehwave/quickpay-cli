@@ -5,6 +5,12 @@ namespace App\Credentials;
 use App\Credentials\Exceptions\CredentialStoreException;
 use JsonException;
 
+/**
+ * Resolves and persists the single Quickpay API credential.
+ *
+ * Environment credentials intentionally take precedence so CI and secret
+ * managers never need to write a long-lived key to a developer's config file.
+ */
 final readonly class CredentialStore
 {
     private string $path;
@@ -100,6 +106,9 @@ final readonly class CredentialStore
         try {
             $json = json_encode(['api_key' => $apiKey], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR).PHP_EOL;
 
+            // Write and restrict a sibling file before renaming it. Readers
+            // therefore see either the old complete config or the new one,
+            // never partially written JSON or a briefly world-readable key.
             if (@file_put_contents($temporaryPath, $json, LOCK_EX) === false
                 || ! @chmod($temporaryPath, 0600)
                 || ! @rename($temporaryPath, $this->path)) {

@@ -17,6 +17,13 @@ use InvalidArgumentException;
 use JsonException;
 use Symfony\Component\Console\Output\OutputInterface;
 
+/**
+ * Provides guarded access to Quickpay endpoints without a first-class command.
+ *
+ * Flexibility stops at the HTTP trust boundary: path, protected headers, body,
+ * and mutation confirmation still pass through the same validation as the
+ * dedicated payment commands.
+ */
 class ApiCommand extends Command
 {
     use InteractsWithQuickpay;
@@ -150,6 +157,8 @@ class ApiCommand extends Command
 
     private function writeSafetyLine(string $message): void
     {
+        // Keep stdout machine-readable in JSON mode without hiding mutation
+        // summaries and confirmation prompts from the operator.
         $output = $this->option('json')
             ? $this->getOutput()->getErrorStyle()
             : $this->getOutput();
