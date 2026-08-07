@@ -15,30 +15,33 @@ project_root="$(cd -- "$script_dir/.." && pwd)"
 
 cd "$project_root"
 
-composer_version="$(composer --version --no-ansi | awk '{print $3}')"
+composer_version="$(
+    composer --version --no-ansi 2>/dev/null \
+        | awk '$1 == "Composer" && $2 == "version" { print $3; exit }'
+)"
+
+if [[ -z "$composer_version" ]]; then
+    echo "Unable to determine the Composer version." >&2
+    exit 1
+fi
 
 if [[ "$composer_version" != "2.10.2" ]]; then
     echo "Release builds require Composer 2.10.2; found $composer_version." >&2
     exit 1
 fi
 
-# Composer's generated metadata is packaged in the PHAR, so install the lock
-# file with the same root identity used by CI before testing or compiling it.
+# Install the lock file with the same root identity used by CI before testing
+# or compiling the release artifact.
 COMPOSER_ROOT_VERSION=dev-main composer install --no-interaction --no-progress --prefer-dist
-composer validate --strict
-composer audit --locked --abandoned=fail
+composer verify
 
+# The release runner is disposable. Remove development-only packages before
+# compiling so the standalone PHAR contains only the runtime dependency graph.
+COMPOSER_ROOT_VERSION=dev-main composer install --no-dev --no-interaction --no-progress --prefer-dist
 php quickpay app:build quickpay --build-version="$release_version" --no-interaction
-
-# The integrity test normally expects the tracked development build. Release
-# builds pass their explicit version so the same byte-level test verifies the
-# versioned config embedded by Laravel Zero.
-QUICKPAY_PHAR_BUILD_VERSION="$release_version" composer check
-QUICKPAY_PHAR_BUILD_VERSION="$release_version" composer coverage
 
 test "$(builds/quickpay --version)" = "Quickpay $release_version"
 builds/quickpay list --raw
-php scripts/verify-phar-source.php builds/quickpay "$release_version"
 git diff --check
 
 install -d "$release_dist"

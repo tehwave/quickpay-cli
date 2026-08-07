@@ -1,207 +1,156 @@
 # Releasing Quickpay CLI
 
-This runbook separates reversible preparation from public publication. Replace `1.0.0` with the intended version and `v1.0.0` with the matching tag.
-
-Composer 2.10.2 is required because generated Composer metadata is part of the byte-verified PHAR. This pin must be advanced promptly when the Composer project publishes a security fix.
+This runbook separates source publication from generated artifacts. Replace
+`1.0.0` with the intended version and `v1.0.0` with its tag.
 
 ## Distribution model
 
-Composer consumers install the tracked `builds/quickpay` executable; they do not
-need Laravel Zero in their own dependency graph. Laravel Zero therefore remains
-a development dependency even though Box must embed it in the PHAR.
+The repository contains source code and the `quickpay` Composer binary. It does
+not contain a built PHAR.
 
-`box.json` deliberately keeps `dump-autoload` and `exclude-dev-files` disabled.
-The first setting preserves the checked-in Composer autoloader so the integrity
-verifier can compare the archive to the checkout byte for byte. Box disables
-development-package exclusion in that mode because removing packages without
-regenerating the autoloader can leave references to missing files. The trade-off
-is a larger PHAR that includes build and test tooling. Prefer that explicit,
-verified artifact over a smaller archive with a stale autoloader; changing this
-model requires a separate production dependency tree and corresponding verifier
-coverage.
+- Packagist users install the source package and its runtime dependencies with
+  Composer.
+- GitHub releases additionally provide a standalone `quickpay` PHAR, checksum,
+  and tar archive.
+- `.github/workflows/build-release.yml` builds those files from a selected
+  source commit and uploads temporary workflow artifacts. It never commits a
+  generated binary.
+- A published tag and its release assets are immutable. Fix release mistakes
+  with a new version.
 
-## 1. Prepare the repository
+Release builds use Composer 2.10.2 so local and CI packaging use the same
+Composer-generated metadata. Advance the pin when intentionally upgrading the
+release toolchain or responding to a Composer security release.
 
-Before the first public release, the repository owner must make
-`tehwave/quickpay-cli` public, set its description to
-`A safety-focused command-line client for the Quickpay API.`, set its homepage
-to `https://peterchrjoergensen.dk`, add the `quickpay`, `php`, `cli`, `payments`,
-`laravel-zero`, and `phar` topics, and confirm Issues and Actions are enabled.
+## 1. Prepare repository controls
 
-Configure these security controls before running the release workflow:
+Before the first public release, make `tehwave/quickpay-cli` public and confirm
+Issues and Actions are enabled. Configure:
 
-### Releases
+- immutable GitHub releases;
+- a protected default branch requiring the `Quality` jobs;
+- a protected `v*` tag pattern restricted to maintainers;
+- read-only default Actions permissions;
+- dependency graph, Dependabot alerts and security updates, secret scanning,
+  push protection, and private vulnerability reporting;
+- GitHub-authored actions plus `shivammathur/setup-php`, with actions pinned to
+  full commit SHAs.
 
-- In **Settings → General → Releases**, enable release immutability. It protects
-  only releases published after the setting is enabled.
-- Always create a draft release, attach every asset and the checksum, review the
-  notes, then publish it. Publishing locks the tag and assets and creates
-  GitHub's release attestation.
+Do not add Quickpay credentials, Packagist credentials, personal access tokens,
+or signing keys to the build workflow. The build job requires only source-read
+access. The provenance job receives identity-token permission but never runs
+repository code or the PHAR.
 
-### Actions
+Do not submit the package to Packagist until the public repository, default
+branch, license, README, and first version tag are ready.
 
-- In **Settings → Actions → General**, keep the default workflow permission at
-  **Read repository contents and packages permissions** and leave permission to
-  create or approve pull requests disabled.
-- Allow actions created by GitHub plus `shivammathur/setup-php`, and enable
-  **Require actions to be pinned to a full-length commit SHA**. The repository
-  workflows pin every action and Dependabot keeps those pins current.
-- Do not add Quickpay, Packagist, signing, or personal access tokens to the build
-  workflow. Its build job has read-only source access and cannot request identity
-  tokens. The attestation job can request an identity token but does not execute
-  repository code or the PHAR. Only the final commit job can write repository
-  contents, and it also never executes repository code or the PHAR.
+## 2. Choose and document the version
 
-### Dependency and secret security
-
-- In **Settings → Advanced Security**, enable the dependency graph, Dependabot
-  alerts, Dependabot security updates, grouped security updates, secret
-  scanning, push protection, and private vulnerability reporting.
-- Keep `.github/dependabot.yml` enabled for Composer and GitHub Actions. After
-  the repository is public, the `Dependency review` check rejects vulnerable
-  dependency additions in pull requests.
-- Subscribe to repository **Security alerts** notifications so private reports,
-  leaked-secret alerts, and vulnerable dependency alerts are not missed.
-
-### Branches and tags
-
-- Create an active branch ruleset for the default branch. Require a pull request,
-  require every `Quality` job on the latest commit, require the branch to be up
-  to date, require linear history, and block force pushes and deletion. A solo
-  maintainer can use zero required approvals; add a review requirement when a
-  second trusted maintainer is available.
-- Create an active tag ruleset targeting `v*`. Restrict tag creation to the
-  maintainer and restrict updates and deletion. Do not give GitHub Actions a tag
-  bypass: this repository creates and publishes releases manually.
-- Run the binary workflow only on a dedicated release branch such as
-  `release/1.0.0`. The workflow refuses the default branch and pushes the PHAR
-  only if that branch still points at the exact source commit it built.
-
-Do not submit the package to Packagist until the public repository, default branch, license, README, and first version tag are ready.
-
-## 2. Choose the release
-
-For the initial stable launch, use `1.0.0` only if the documented command surface and safety contract are intended to be stable. Review [CHANGELOG.md](../CHANGELOG.md), move the unreleased entries under:
+Use `1.0.0` only if the public command and safety contracts are ready to be
+stable. In `CHANGELOG.md`, move the relevant entries beneath:
 
 ```markdown
 ## [1.0.0] - YYYY-MM-DD
 ```
 
-Keep an empty `[Unreleased]` section above it.
+Keep an empty `[Unreleased]` section above it. The release version is embedded
+when the PHAR is built; there is no source-code version constant to edit.
 
-The application version is embedded during the PHAR build; there is no separate source-code version constant.
+## 3. Verify the source commit
 
-## 3. Verify the source checkout
-
-Start from an up-to-date release branch with no unrelated changes:
+Work from an up-to-date branch with no unrelated changes:
 
 ```bash
 git status --short
 git pull --ff-only origin main
 COMPOSER_ROOT_VERSION=dev-main composer install --no-interaction --no-progress --prefer-dist
-composer validate --strict
-composer audit --locked --abandoned=fail
-composer check
-composer coverage
+composer verify
 git diff --check
 ```
 
-Expected:
+Expected results:
 
-- 0 Composer validation errors;
-- 0 known dependency advisories;
-- all Pest tests pass;
-- PHPStan level 8 and Pint pass;
-- total application coverage is at least 90%;
-- no unexpected working-tree changes.
+- all Pest suites pass without contacting Quickpay;
+- application coverage is at least 90%;
+- PHPStan and Pint pass;
+- Composer metadata is valid and the lock has no known advisories;
+- the working tree contains only intentional release changes.
 
-The automated suite must use HTTP fakes. Do not run live payment mutations as part of release verification.
+Commit the source and changelog. Wait for every `Quality` job on the exact
+commit to pass.
 
-## 4. Build the versioned PHAR
+## 4. Build the release artifacts
 
-Build with the release version, not `dev`. The script installs the locked
-dependencies with the reproducible Composer identity, runs every quality and
-coverage gate, builds and byte-verifies the PHAR, and writes download artifacts
-under `builds/release`:
-
-```console
-scripts/build-release 1.0.0
-```
-
-Alternatively, open **Actions → Build release binary → Run workflow**, select
-the branch that should receive the binary, and enter the version without a `v`
-prefix. The manually dispatched workflow calls the same release script, uploads
-the verified binary, checksum, and a permission-preserving tar archive for 14
-days, then commits only
-`builds/quickpay` back to the selected branch.
-
-The selected release branch must permit the GitHub Actions bot to push. The
-workflow refuses the default branch, tag refs, unexpected working-tree changes,
-and commits containing anything besides `builds/quickpay`. A concurrent branch
-update makes the push fail instead of being rebased or overwritten. The build
-job has only read permission. A separate job that never executes project code
-creates the signed build-provenance attestation, and a third minimal job
-downloads and commits the PHAR without executing it. The workflow does not open
-a pull request, create a tag or release, publish to Packagist, or contact
-Quickpay; those release steps remain manual.
-
-Verify:
-
-- `builds/quickpay --version` reports `Quickpay 1.0.0`;
-- the raw command list contains only the documented public commands;
-- the integrity verifier reports no missing, extra, or mismatched files;
-- the PHAR contains no credential file, `.env`, API key, or local configuration;
-- the SHA-256 value is saved for the GitHub release.
-
-Review the complete change:
+Locally, build into the ignored `builds/release` directory:
 
 ```bash
-git status --short
-git diff --check
-git diff --stat
-git diff -- README.md CHANGELOG.md composer.json composer.lock builds/quickpay
+composer release:build -- 1.0.0
 ```
 
-When building locally, commit the source, changelog, and rebuilt
-`builds/quickpay` together. When using the workflow, commit the source and
-changelog to the selected branch first; the workflow adds the verified PHAR in
-its own commit. Open a pull request and wait for every `Quality` job to pass.
+The script installs the locked development graph, runs `composer verify`,
+reinstalls runtime-only dependencies, builds the versioned PHAR, smoke-checks
+its version and command list, and creates:
 
-## 5. Smoke-test the Quickpay contract
+```text
+builds/release/quickpay
+builds/release/quickpay.sha256
+builds/release/quickpay-1.0.0.tar.gz
+```
 
-Automated tests deliberately use HTTP fakes. Before tagging, use a dedicated
-Quickpay test merchant to confirm the exact versioned PHAR still matches the
-remote v10 contract:
+Generated files remain ignored and must not be committed.
+
+The preferred release build is **Actions → Build release binary → Run
+workflow** on the exact verified commit. Enter the version without a `v`
+prefix. The workflow runs the same script, uploads the three files for 14 days,
+and creates build-provenance attestation for the PHAR. It does not push, tag,
+publish a release, publish to Packagist, or contact Quickpay.
+
+Download the workflow artifact and verify:
 
 ```bash
-QUICKPAY_API_KEY="$QUICKPAY_TEST_API_KEY" builds/quickpay auth
-QUICKPAY_API_KEY="$QUICKPAY_TEST_API_KEY" builds/quickpay payments:list --page-size=1 --json
+./quickpay --version
+./quickpay list --raw
+shasum -a 256 -c quickpay.sha256
 ```
 
-Populate `QUICKPAY_TEST_API_KEY` through a secret manager without saving the
-credential in shell history. Do not capture command output that contains
-merchant or payment data, and unset the variable after the smoke test.
+The version must be `Quickpay 1.0.0`, the command list must match the README,
+and the checksum must pass. Inspect the PHAR contents for unexpected local
+configuration, credentials, development packages, or test files.
 
-Creating a payment or payment link still creates a remote resource, even on a
-test merchant. Captures, refunds, cancellations, and raw non-`GET` requests are
-payment mutations. Exercise those flows only when the exact test operation,
-payment, and amount have been separately authorized; never use a production
-merchant for a release smoke test.
+## 5. Smoke-test the remote contract
 
-## 6. Tag the verified commit
+Automated tests deliberately use HTTP fakes. Before tagging, use the downloaded
+release candidate and a dedicated Quickpay test merchant for a minimal remote
+contract check:
 
-After the release pull request is merged, update local `main` and confirm the committed artifact again:
+```bash
+QUICKPAY_API_KEY="$QUICKPAY_TEST_API_KEY" ./quickpay auth
+QUICKPAY_API_KEY="$QUICKPAY_TEST_API_KEY" ./quickpay payments:list --page-size=1 --json
+```
+
+Load `QUICKPAY_TEST_API_KEY` through a secret manager without saving it in shell
+history. Do not capture merchant or payment data, and unset the variable after
+the smoke test.
+
+Creating a payment or payment link creates a remote resource even on a test
+merchant. Captures, refunds, cancellations, and raw non-`GET` requests are
+payment mutations. Exercise them only when the exact test operation, payment,
+and amount have been separately authorized. Never use a production merchant for
+a release smoke test.
+
+## 6. Tag the verified source commit
+
+After the release changes are merged, update local `main` and confirm it is the
+same source commit used by the successful artifact build:
 
 ```bash
 git switch main
 git pull --ff-only origin main
-builds/quickpay --version
-php scripts/verify-phar-source.php builds/quickpay 1.0.0
 git status --short
+git rev-parse HEAD
 ```
 
-Create and push a signed tag. Git can use a GPG or SSH signing key configured for
-your GitHub identity:
+Create and push a signed tag:
 
 ```bash
 git tag -s v1.0.0 -m "Quickpay CLI 1.0.0"
@@ -213,19 +162,18 @@ Never move or replace a published release tag.
 
 ## 7. Publish the GitHub release
 
-Create a **draft** GitHub release from the existing `v1.0.0` tag:
+Create a draft release from `v1.0.0`:
 
 - title: `Quickpay CLI 1.0.0`;
-- release notes: summarize the dated changelog section and repeat the
-  mutation/credential safety model;
-- attach the workflow artifacts as `quickpay`, `quickpay.sha256`, and
+- notes: summarize the dated changelog and repeat the credential and mutation
+  safety model;
+- assets: the workflow-produced `quickpay`, `quickpay.sha256`, and
   `quickpay-1.0.0.tar.gz`;
-- repeat the SHA-256 checksum in the release notes;
-- do not mark a stable release as a prerelease.
+- include the SHA-256 value in the notes;
+- do not mark a stable version as a prerelease.
 
-Review the draft carefully before publishing because immutable release assets
-cannot be replaced or removed afterward. After publication, download the PHAR
-and verify both GitHub's immutable-release attestation and the build provenance:
+Review everything before publishing. After publication, verify the immutable
+release and artifact provenance:
 
 ```bash
 gh release verify v1.0.0 --repo tehwave/quickpay-cli
@@ -233,21 +181,16 @@ gh release verify-asset v1.0.0 quickpay --repo tehwave/quickpay-cli
 gh attestation verify quickpay --repo tehwave/quickpay-cli
 ```
 
-Then independently verify its saved checksum and smoke tests. If anything is
-wrong, publish a new patch version; never delete or rewrite a published release.
+Independently recheck the downloaded checksum and version. If anything is
+wrong, publish a new patch version; never replace a published asset.
 
-## 8. Publish to Packagist
+## 8. Publish and verify Packagist
 
-1. Sign in to Packagist with the account that should own `tehwave/quickpay-cli`.
-2. Submit `https://github.com/tehwave/quickpay-cli`.
-3. Confirm Packagist discovers `v1.0.0` and displays PHP `^8.4`, the MIT license, source/support links, and `builds/quickpay` as the binary.
-4. Enable GitHub/Packagist automatic updates if they were not connected during submission.
+Submit `https://github.com/tehwave/quickpay-cli` to Packagist. Confirm it finds
+`v1.0.0`, PHP `^8.4`, the MIT license, source/support links, Laravel Zero as a
+runtime dependency, and `quickpay` as the Composer binary.
 
-Packagist consumers should receive the tracked PHAR without installing Laravel Zero as a runtime dependency.
-
-## 9. Verify a clean consumer install
-
-Use an empty temporary Composer home or a disposable environment:
+Verify a clean source-package install in a disposable Composer environment:
 
 ```bash
 composer global require tehwave/quickpay-cli:^1.0
@@ -256,20 +199,21 @@ quickpay list --raw
 quickpay auth
 ```
 
-Verify the version and public command list. `quickpay auth` should report that no credential is configured and must not contact Quickpay without a key.
-
-Also verify the agent reference only after the public package is discoverable:
+`quickpay auth` should report that no credential is configured and must not
+contact Quickpay without a key. After the public package is discoverable, also
+verify:
 
 ```bash
 skills add tehwave/quickpay-cli
 ```
 
-## 10. After publication
+## 9. After publication
 
-- Confirm the README badge and installation command work anonymously.
-- Confirm the `Quality` workflow passes on public `main`.
-- Confirm the GitHub security-advisory link is available.
-- Add the released version and comparison links to `CHANGELOG.md` if desired.
-- Announce the release only after both GitHub and Packagist installs have been verified.
+- Confirm the README installation path works anonymously.
+- Confirm `Quality` passes on public `main`.
+- Confirm private vulnerability reporting is available.
+- Add release comparison links to `CHANGELOG.md` when applicable.
+- Announce only after both the GitHub artifact and Packagist install have been
+  verified.
 
-If a release problem is found, stop promotion and fix forward with a new patch version such as `1.0.1`. Do not rewrite the published tag or silently replace its PHAR.
+Fix release problems forward with a new patch version such as `1.0.1`.

@@ -222,20 +222,24 @@ The source checkout uses Laravel Zero 12, Pest 4, Larastan/PHPStan, Pint, and Bo
 ```bash
 composer install
 composer check
-composer coverage
-composer audit --locked --abandoned=fail
+composer verify
 ```
 
-The full test suite uses HTTP fakes and does not contact Quickpay API.
+`composer check` runs tests, static analysis, and formatting checks. `composer
+verify` additionally enforces coverage, validates package metadata, and audits
+the locked dependencies. The test suite uses HTTP fakes and does not contact
+Quickpay API.
 
-Build and verify the tracked development PHAR:
+Build an ignored development PHAR when packaging behavior changes:
 
 ```bash
 composer build
 builds/quickpay --version
 builds/quickpay list --raw
-php scripts/verify-phar-source.php builds/quickpay dev
 ```
+
+The PHAR is a generated release artifact, not repository source. Versioned
+release artifacts are built with `composer release:build -- 1.0.0`.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) before changing commands or security behavior. 
 

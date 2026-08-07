@@ -11,7 +11,7 @@
     ],
     "exclude-composer-files": false,
     "dump-autoload": false,
-    "exclude-dev-files": false,
+    "exclude-dev-files": true,
     "check-requirements": true,
     "output": "quickpay.phar",
     "compression": "GZ",

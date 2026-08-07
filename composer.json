@@ -16,11 +16,11 @@
         "source": "https://github.com/tehwave/quickpay-cli"
     },
     "require": {
-        "php": "^8.4"
+        "php": "^8.4",
+        "laravel-zero/framework": "^12.0.2"
     },
     "require-dev": {
         "larastan/larastan": "^3.10",
-        "laravel-zero/framework": "^12.0.2",
         "laravel/pint": "^1.25.1",
         "mockery/mockery": "^1.6.12",
         "pestphp/pest": "^3.8.4|^4.1.2"
@@ -45,21 +45,27 @@
     },
     "minimum-stability": "stable",
     "prefer-stable": true,
-    "bin": ["builds/quickpay"],
+    "bin": ["quickpay"],
     "scripts": {
         "test": "php quickpay test",
         "coverage": "php -d pcov.enabled=1 quickpay test --coverage --min=90",
         "analyse": "vendor/bin/phpstan analyse --memory-limit=1G",
         "format": "vendor/bin/pint",
         "format:test": "vendor/bin/pint --test",
-        "build": [
-            "COMPOSER_ROOT_VERSION=dev-main composer install --no-interaction --no-progress --prefer-dist",
-            "php quickpay app:build quickpay --build-version=dev --no-interaction"
-        ],
+        "build": "php quickpay app:build quickpay --build-version=dev --no-interaction",
+        "validate:strict": "composer validate --strict",
+        "audit:locked": "composer audit --locked --abandoned=fail",
+        "release:build": "scripts/build-release",
         "check": [
             "@test",
             "@analyse",
             "@format:test"
+        ],
+        "verify": [
+            "@check",
+            "@coverage",
+            "@validate:strict",
+            "@audit:locked"
         ]
     }
 }
