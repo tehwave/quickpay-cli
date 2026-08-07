@@ -84,6 +84,9 @@ class WatchCallbacksCommand extends AuthenticatedCommand
     {
         $value = fn (string $key): string => ResponseBodySanitizer::terminalLine((string) ($context[$key] ?? '-'), $apiKey);
         $safeDestination = ResponseBodySanitizer::terminalLine($destination, $apiKey);
+        $operation = isset($context['payment_id'])
+            ? "payment {$value('payment_id')} operation {$value('operation_id')}"
+            : "operation {$value('operation_id')}";
 
         if ($event === 'watching-all') {
             $this->info('Watching all Quickpay payment callbacks. Press Ctrl-C to stop.');
@@ -97,9 +100,9 @@ class WatchCallbacksCommand extends AuthenticatedCommand
             'watching' => $this->line("Payment {$value('payment_id')} ready; {$value('baseline_operations')} existing operation(s) baselined."),
             'payment-found' => $this->line("Order {$value('order_id')} created payment {$value('payment_id')}."),
             'multiple-operations' => $this->warn("Detected {$value('count')} operations in one poll; forwarding one callback per operation with the same latest payment snapshot."),
-            'delivery-retry' => $this->warn("Callback for operation {$value('operation_id')} failed (HTTP {$value('status')}); retrying before later operations."),
+            'delivery-retry' => $this->warn("Callback for {$operation} failed (HTTP {$value('status')}); retrying before later operations."),
             'polling-retry' => $this->warn("Quickpay polling failed (HTTP {$value('status')}); retrying in {$value('delay')} second(s)."),
-            'delivered' => $this->info("Delivered callback for operation {$value('operation_id')} with HTTP {$value('status')}."),
+            'delivered' => $this->info("Delivered callback for {$operation} with HTTP {$value('status')}."),
             default => null,
         };
 

@@ -318,10 +318,12 @@ final class CallbackWatchRunner implements CallbackWatcher
         }, $operations);
 
         usort($normalized, fn (array $left, array $right): int => [
-            $left['created_at']->format('U.u'),
+            (int) $left['created_at']->format('U'),
+            (int) $left['created_at']->format('u'),
             str_pad($left['id'], 20, '0', STR_PAD_LEFT),
         ] <=> [
-            $right['created_at']->format('U.u'),
+            (int) $right['created_at']->format('U'),
+            (int) $right['created_at']->format('u'),
             str_pad($right['id'], 20, '0', STR_PAD_LEFT),
         ]);
 

@@ -398,6 +398,41 @@ it('baselines existing operations and forwards every later operation in order', 
         ->and($sleeps)->toBe([2]);
 });
 
+it('orders operations chronologically when decimal timestamps lose float precision', function () {
+    Http::fake([
+        'https://api.quickpay.net/payments/42' => Http::sequence()
+            ->push(watchPayment([]))
+            ->push(watchPayment([
+                watchOperation(1, 'capture', '9999-12-31T00:00:00.000002Z'),
+                watchOperation(2, 'authorize', '9999-12-31T00:00:00.000001Z'),
+            ])),
+        'http://localhost/callback' => Http::sequence()->push('', 204)->push('', 204),
+    ]);
+    $events = [];
+    $sleeps = [];
+    $runner = callbackWatchRunner($sleeps, 1);
+
+    $runner->run(
+        paymentId: '42',
+        orderId: null,
+        target: CallbackTarget::fromString('http://localhost/callback'),
+        apiKey: 'api-key',
+        privateKey: 'private-key',
+        interval: 2,
+        observer: function (string $event, array $context) use (&$events): void {
+            $events[] = [$event, $context];
+        },
+    );
+
+    $delivered = collect($events)
+        ->filter(fn (array $event): bool => $event[0] === 'delivered')
+        ->pluck('1.operation_id')
+        ->values()
+        ->all();
+
+    expect($delivered)->toBe(['2', '1']);
+});
+
 it('treats all operations as new when an order appears after watching starts', function () {
     Http::fake([
         'https://api.quickpay.net/payments?*' => Http::sequence()

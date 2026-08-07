@@ -71,6 +71,8 @@ it('accepts an account-wide watch without a payment selector', function () {
                         ->and($target->url)->toBe('http://localhost/callback');
 
                     $observer('watching-all', ['ready_at' => '2026-08-07T10:00:01+00:00']);
+                    $observer('delivered', ['payment_id' => '42', 'operation_id' => '1', 'status' => 204]);
+                    $observer('delivered', ['payment_id' => '43', 'operation_id' => '1', 'status' => 204]);
                 }
             };
         }
@@ -80,6 +82,8 @@ it('accepts an account-wide watch without a payment selector', function () {
     $this->artisan('callbacks:watch', ['--to' => 'http://localhost/callback'])
         ->expectsOutputToContain('Watching all Quickpay payment callbacks')
         ->expectsOutputToContain('2026-08-07T10:00:01+00:00')
+        ->expectsOutputToContain('payment 42 operation 1')
+        ->expectsOutputToContain('payment 43 operation 1')
         ->assertExitCode(0);
 
     Http::assertNothingSent();
