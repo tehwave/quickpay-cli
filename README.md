@@ -62,6 +62,10 @@ quickpay callbacks:watch --to=http://127.0.0.1:8000/quickpay/callback
 Leave the watcher running while testing the payment flow. It signs and sends
 payment updates to your local callback handler.
 
+With no selector, the watcher forwards new operation callbacks for every
+payment changed after it becomes ready. Pass a payment ID or `--order-id` to
+narrow the watch to one payment. Existing operations are not replayed.
+
 ## Development
 
 ```bash

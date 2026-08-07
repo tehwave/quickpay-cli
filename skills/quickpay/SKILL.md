@@ -62,9 +62,14 @@ quickpay api <GET|POST|PUT|PATCH|DELETE> <path> [--query=key=value]...
 
 ## Local callback development
 
-Use `callbacks:replay` to send the current payment resource once. Use
-`callbacks:watch` as a foreground stream for operations that appear after the
-watch starts. Provide exactly one selector: a payment ID or `--order-id`.
+Use `callbacks:replay` with exactly one payment ID or `--order-id` selector to
+send that payment's current resource once.
+
+Use selector-free `callbacks:watch --to=url` to watch every payment operation
+created after the watcher announces that it is ready. This account-wide mode
+may forward data from any payment changed during the session. Add one payment
+ID or `--order-id` to narrow the watch to a single payment. Providing both
+selectors is invalid.
 
 The `--to` URL is an outbound POST destination and may receive merchant or
 transaction data. Require the user to provide or explicitly approve the exact
@@ -72,11 +77,12 @@ destination before running either command. Do not invent a public endpoint,
 silently start a tunnel, or substitute `--callback-url`: that option tells
 Quickpay's servers where to deliver and localhost is not reachable from them.
 
-Watch has no JSON mode. It retries a failed captured callback before later
-operations and runs until the user stops it with Ctrl-C. `QUICKPAY_PRIVATE_KEY`
-is an optional sensitive environment override; never ask the user to paste it
-into chat or place it in a command argument. Without it, the CLI retrieves the
-key through the authenticated API and retains it only in memory.
+Watch has no JSON mode and does not replay existing operations. It retries a
+failed captured callback before later operations and runs until the user stops
+it with Ctrl-C. `QUICKPAY_PRIVATE_KEY` is an optional sensitive environment
+override; never ask the user to paste it into chat or place it in a command
+argument. Without it, the CLI retrieves the key through the authenticated API
+and retains it only in memory.
 
 ## Raw API guardrails
 

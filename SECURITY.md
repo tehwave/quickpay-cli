@@ -61,4 +61,9 @@ commands do not add a second confirmation prompt. Avoid destinations you do not
 control, since payment callbacks contain merchant and transaction data even
 after credential redaction.
 
+Running `callbacks:watch` without a payment ID or `--order-id` watches the
+account. It may forward data from any payment changed during that session, not
+only the payment involved in the developer's current checkout flow. Use a
+selector when the destination should receive data for only one payment.
+
 Quickpay's hosted API, Manager, payment window, and merchant configuration are outside this project's control and should be reported to Quickpay through its official channels.

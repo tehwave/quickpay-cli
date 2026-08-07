@@ -3,8 +3,13 @@
 namespace App\Callbacks\Resolution;
 
 use App\Callbacks\Watching\CallbackPollingException;
+use App\Quickpay\Pagination\LinkHeaderParser;
+use App\Quickpay\Pagination\PaginationTargetCanonicalizer;
 use App\Quickpay\QuickpayClient;
 use App\Quickpay\QuickpayResponse;
+use DateTimeImmutable;
+use DateTimeZone;
+use InvalidArgumentException;
 use UnexpectedValueException;
 
 /**
@@ -18,6 +23,74 @@ use UnexpectedValueException;
 final readonly class PaymentLocator
 {
     public function __construct(private QuickpayClient $quickpay) {}
+
+    /** @return array<int, QuickpayResponse> */
+    public function changedBetween(DateTimeImmutable $minimum, DateTimeImmutable $maximum): array
+    {
+        $utc = new DateTimeZone('UTC');
+        $query = [
+            'timestamp' => 'updated_at',
+            'min_time' => $minimum->setTimezone($utc)->format('Y-m-d H:i:s O'),
+            'max_time' => $maximum->setTimezone($utc)->format('Y-m-d H:i:s O'),
+            'operations_size' => 0,
+            'page_size' => 100,
+        ];
+        $response = $this->changedPage('/payments', $query);
+        $pageCount = 1;
+        $seen = [PaginationTargetCanonicalizer::fromQuery('/payments', $query) => true];
+
+        $ids = [];
+
+        while (true) {
+            foreach ($response->json as $payment) {
+                $id = is_array($payment) && ! array_is_list($payment) ? ($payment['id'] ?? null) : null;
+
+                if ((! is_int($id) && ! is_string($id)) || (string) $id === '') {
+                    throw new UnexpectedValueException('Quickpay returned a changed-payment row without a valid payment ID.');
+                }
+
+                $ids[(string) $id] = true;
+            }
+
+            $next = LinkHeaderParser::next($response->header('Link'));
+
+            if ($next === null) {
+                break;
+            }
+
+            if ($pageCount >= 100) {
+                throw new InvalidArgumentException('Pagination exceeded the configured maximum of 100 pages.');
+            }
+
+            $canonicalNext = PaginationTargetCanonicalizer::canonical($next);
+
+            if (isset($seen[$canonicalNext])) {
+                throw new InvalidArgumentException('Quickpay returned a pagination cycle.');
+            }
+
+            $seen[$canonicalNext] = true;
+            $response = $this->changedPage($next);
+            $pageCount++;
+        }
+
+        return array_map($this->byId(...), array_keys($ids));
+    }
+
+    /** @param array<string, mixed> $query */
+    private function changedPage(string $path, array $query = []): QuickpayResponse
+    {
+        $response = $this->quickpay->get($path, $query);
+
+        if (! $response->successful()) {
+            throw $this->pollingFailure($response);
+        }
+
+        if (! is_array($response->json) || ! array_is_list($response->json)) {
+            throw new UnexpectedValueException('Quickpay returned a malformed changed-payment response.');
+        }
+
+        return $response;
+    }
 
     public function byId(string $paymentId): QuickpayResponse
     {
