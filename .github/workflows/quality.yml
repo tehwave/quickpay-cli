@@ -110,11 +110,6 @@ jobs:
           coverage: none
           tools: composer:2.10.2
       - run: composer install --no-interaction --no-progress --prefer-dist
-      - run: test -x builds/quickpay
-      - run: builds/quickpay --version
-      - run: builds/quickpay list --raw
-      - run: php scripts/verify-phar-source.php builds/quickpay dev
       - run: composer build
       - run: builds/quickpay --version
       - run: builds/quickpay list --raw
-      - run: php scripts/verify-phar-source.php builds/quickpay dev

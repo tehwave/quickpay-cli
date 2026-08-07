@@ -37,7 +37,7 @@ Security-relevant areas include:
 - callback destination validation, HMAC construction, redirect handling, and
   separation between Quickpay-authenticated requests and local forwarding;
 - callback private-key retrieval and in-memory-only handling;
-- PHAR contents and source-integrity verification.
+- release artifact contents, checksums, and build provenance.
 
 ## Local callback forwarding
 

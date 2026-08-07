@@ -76,28 +76,12 @@ final readonly class QuickpayClient
         return $this->request('DELETE', $path, $query, $data, $headers);
     }
 
-    public function getPagination(string $url): QuickpayResponse
-    {
-        $parts = parse_url($url);
-
-        if (! is_array($parts)
-            || ($parts['scheme'] ?? null) !== 'https'
-            || ($parts['host'] ?? null) !== 'api.quickpay.net'
-            || isset($parts['user'])
-            || isset($parts['pass'])
-            || isset($parts['port'])) {
-            throw new InvalidArgumentException('Pagination URL must use the Quickpay API origin.');
-        }
-
-        return $this->send('GET', $url);
-    }
-
     /**
      * @param  array<array-key, mixed>  $query
      * @param  array<string, mixed>  $data
      * @param  array<string, string>  $headers
      */
-    public function request(string $method, string $path, array $query = [], array $data = [], array $headers = []): QuickpayResponse
+    private function request(string $method, string $path, array $query = [], array $data = [], array $headers = []): QuickpayResponse
     {
         if (parse_url($path, PHP_URL_SCHEME) !== null || str_starts_with($path, '//')) {
             throw new InvalidArgumentException('Quickpay request paths must be relative.');

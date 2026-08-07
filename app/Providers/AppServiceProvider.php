@@ -2,10 +2,13 @@
 
 namespace App\Providers;
 
-use App\Credentials\CredentialStore;
-use App\Quickpay\QuickpayClientFactory;
-use App\Support\NativeStdinTerminalDetector;
-use App\Support\StdinTerminalDetector;
+use App\Console\Terminal\NativeStdinTerminalDetector;
+use App\Console\Terminal\StdinTerminalDetector;
+use App\Credentials\ApiKeyResolver;
+use App\Credentials\CredentialFile;
+use App\Credentials\EnvironmentVariables;
+use App\Credentials\HomeDirectory;
+use App\Quickpay\AuthenticatedQuickpayFactory;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -19,8 +22,14 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->app->singleton(CredentialStore::class);
-        $this->app->singleton(QuickpayClientFactory::class);
+        $this->app->singleton(EnvironmentVariables::class);
+        $this->app->singleton(HomeDirectory::class);
+        $this->app->singleton(
+            CredentialFile::class,
+            fn ($app): CredentialFile => CredentialFile::inHome($app->make(HomeDirectory::class)),
+        );
+        $this->app->singleton(ApiKeyResolver::class);
+        $this->app->singleton(AuthenticatedQuickpayFactory::class);
         $this->app->singleton(StdinTerminalDetector::class, NativeStdinTerminalDetector::class);
     }
 }

@@ -67,11 +67,28 @@ payment updates to your local callback handler.
 ```bash
 composer install
 composer check
+composer verify
 ```
+
+`composer check` runs tests, static analysis, and formatting checks. `composer
+verify` additionally enforces coverage, validates package metadata, and audits
+the locked dependencies. The test suite uses HTTP fakes and does not contact
+Quickpay API.
+
+Build an ignored development PHAR when packaging behavior changes:
+
+```bash
+composer build
+builds/quickpay --version
+builds/quickpay list --raw
+```
+
+The PHAR is a generated release artifact, not repository source. Versioned
+release artifacts are built with `composer release:build -- 1.0.0`.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) before changing commands or security behavior.
 
-Maintainers should follow [RELEASING.md](RELEASING.md) for releases.
+Maintainers should follow [RELEASING.md](RELEASING.md) for versioned releases.
 
 ## Security
 
