@@ -38,7 +38,6 @@ it('validates watch selectors destination and polling interval before making a r
 
     Http::assertNothingSent();
 })->with([
-    'no selector' => [['--to' => 'http://localhost/callback'], 'payment ID or --order-id'],
     'both selectors' => [[
         'payment-id' => '42',
         '--order-id' => 'order-42',
@@ -51,6 +50,41 @@ it('validates watch selectors destination and polling interval before making a r
     'fractional interval' => [['payment-id' => '42', '--to' => 'http://localhost/callback', '--interval' => '1.5'], '1 through 60'],
 ]);
 
+it('accepts an account-wide watch without a payment selector', function () {
+    app()->instance(CallbackWatcherFactory::class, new class extends CallbackWatcherFactory
+    {
+        public function make(QuickpayClient $quickpay, Factory $http): CallbackWatcher
+        {
+            return new class implements CallbackWatcher
+            {
+                public function run(
+                    ?string $paymentId,
+                    ?string $orderId,
+                    CallbackTarget $target,
+                    string $apiKey,
+                    string $privateKey,
+                    int $interval,
+                    Closure $observer,
+                ): void {
+                    expect($paymentId)->toBeNull()
+                        ->and($orderId)->toBeNull()
+                        ->and($target->url)->toBe('http://localhost/callback');
+
+                    $observer('watching-all', ['ready_at' => '2026-08-07T10:00:01+00:00']);
+                }
+            };
+        }
+    });
+    Http::fake();
+
+    $this->artisan('callbacks:watch', ['--to' => 'http://localhost/callback'])
+        ->expectsOutputToContain('Watching all Quickpay payment callbacks')
+        ->expectsOutputToContain('2026-08-07T10:00:01+00:00')
+        ->assertExitCode(0);
+
+    Http::assertNothingSent();
+});
+
 it('documents foreground streaming behavior without offering json mode', function () {
     $command = new WatchCallbacksCommand;
     $definition = $command->getDefinition();
@@ -58,6 +92,7 @@ it('documents foreground streaming behavior without offering json mode', functio
     expect($definition->hasOption('interval'))->toBeTrue()
         ->and($definition->getOption('interval')->getDefault())->toBe('2')
         ->and($definition->hasOption('json'))->toBeFalse()
+        ->and($definition->getArgument('payment-id')->getDescription())->toContain('Omit to watch all payments')
         ->and($command->getDescription())->toContain('Watch');
 });
 

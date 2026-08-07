@@ -16,10 +16,24 @@ final readonly class CallbackRequest
 
     public static function from(mixed $payment, mixed $order, mixed $destination): self
     {
+        return self::create($payment, $order, $destination, selectorRequired: true);
+    }
+
+    public static function forWatch(mixed $payment, mixed $order, mixed $destination): self
+    {
+        return self::create($payment, $order, $destination, selectorRequired: false);
+    }
+
+    private static function create(
+        mixed $payment,
+        mixed $order,
+        mixed $destination,
+        bool $selectorRequired,
+    ): self {
         $hasPayment = $payment !== null && $payment !== '';
         $hasOrder = is_string($order) && $order !== '';
 
-        if (! $hasPayment && ! $hasOrder) {
+        if ($selectorRequired && ! $hasPayment && ! $hasOrder) {
             throw new InvalidArgumentException('Provide a payment ID or --order-id.');
         }
 

@@ -146,17 +146,22 @@ quickpay callbacks:replay --order-id=demo123 \
 Watch for future operations during a checkout flow:
 
 ```bash
+quickpay callbacks:watch --to=http://localhost/callback
 quickpay callbacks:watch --order-id=demo123 \
   --to=http://127.0.0.1:8000/quickpay/callback
 quickpay callbacks:watch 884201 \
   --to=http://127.0.0.1:8000/quickpay/callback --interval=2
 ```
 
-Exactly one payment selector is required. `--interval` accepts whole seconds
-from 1 through 60. Watch is a foreground, human-readable stream; press Ctrl-C
-to stop it. It baselines operations already present when an existing payment is
-selected. If an order does not exist yet, every operation present when its
-payment first appears is forwarded.
+Omitting a selector watches every payment. A payment ID or `--order-id` narrows
+the watch to one payment. `--interval` accepts whole seconds from 1 through 60.
+Watch is a foreground, human-readable stream; press Ctrl-C to stop it.
+
+Account-wide watch establishes a clean UTC readiness timestamp and forwards
+only operations created from that point onward. Existing operations are not
+replayed. A scoped watch baselines operations already present when an existing
+payment is selected. If an order does not exist yet, every operation present
+when its payment first appears is forwarded.
 
 Every detected operation produces one callback in operation order. If multiple
 operations appear between polls, each POST necessarily contains the same latest
