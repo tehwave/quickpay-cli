@@ -37,6 +37,7 @@ For a refund or cancellation, use the same inspect → verify → explicit autho
 ## Commands
 
 ```text
+quickpay about
 quickpay login
 quickpay auth [--check] [--json]
 quickpay logout

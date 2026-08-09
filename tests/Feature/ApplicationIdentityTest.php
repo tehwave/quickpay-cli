@@ -17,6 +17,7 @@ it('presents only product commands in the public command list', function () {
     );
 
     expect($commands)->toBe([
+        'about',
         'api',
         'auth',
         'login',
