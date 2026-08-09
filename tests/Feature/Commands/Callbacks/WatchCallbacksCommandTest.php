@@ -313,10 +313,11 @@ it('routes terminal and exhausted delivery failures to redacted stderr with repl
         '--to' => 'http://localhost/callback',
     ], ['capture_stderr_separately' => true]);
     $errorOutput = $tester->getErrorOutput();
+    $semanticErrorOutput = preg_replace('/\s+/', ' ', $errorOutput) ?? $errorOutput;
 
     expect($result)->toBe(1)
         ->and($tester->getDisplay())->not->toContain('Callback delivery failed')
-        ->and($errorOutput)
+        ->and($semanticErrorOutput)
         ->toContain('Callback delivery failed for payment 42 operation [redacted]-operation')
         ->toContain($context)
         ->toContain('callbacks:replay 42')
@@ -324,7 +325,7 @@ it('routes terminal and exhausted delivery failures to redacted stderr with repl
         ->not->toContain('watch-api-key');
 
     if ($unexpectedContext !== null) {
-        expect($errorOutput)->not->toContain($unexpectedContext);
+        expect($semanticErrorOutput)->not->toContain($unexpectedContext);
     }
 
     Http::assertNothingSent();
