@@ -27,7 +27,7 @@ final readonly class CallbackForwarder
 
         while (true) {
             if (isset($visited[$url])) {
-                return new CallbackDelivery($url, null, false, $redirects);
+                return new CallbackDelivery($url, null, false, $redirects, CallbackDeliveryFailure::RedirectRejected);
             }
 
             $visited[$url] = true;
@@ -42,7 +42,7 @@ final readonly class CallbackForwarder
                     ->timeout(30)
                     ->send('POST', $url);
             } catch (HttpClientException) {
-                return new CallbackDelivery($url, null, false, $redirects);
+                return new CallbackDelivery($url, null, false, $redirects, CallbackDeliveryFailure::Network);
             }
 
             $status = $response->status();
@@ -52,13 +52,13 @@ final readonly class CallbackForwarder
             }
 
             if (! in_array($status, [301, 307], true)) {
-                return new CallbackDelivery($url, $status, false, $redirects);
+                return new CallbackDelivery($url, $status, false, $redirects, CallbackDeliveryFailure::HttpResponse);
             }
 
             $location = $response->header('Location');
 
             if ($location === '' || $redirects >= self::MAX_REDIRECTS) {
-                return new CallbackDelivery($url, null, false, $redirects);
+                return new CallbackDelivery($url, null, false, $redirects, CallbackDeliveryFailure::RedirectRejected);
             }
 
             try {
@@ -68,12 +68,12 @@ final readonly class CallbackForwarder
                 // protection for a payment payload that started on HTTPS.
                 if (parse_url($url, PHP_URL_SCHEME) === 'https'
                     && parse_url($redirectUrl, PHP_URL_SCHEME) === 'http') {
-                    return new CallbackDelivery($url, null, false, $redirects);
+                    return new CallbackDelivery($url, null, false, $redirects, CallbackDeliveryFailure::RedirectRejected);
                 }
 
                 $url = CallbackTarget::fromString($redirectUrl)->url;
             } catch (\InvalidArgumentException) {
-                return new CallbackDelivery($url, null, false, $redirects);
+                return new CallbackDelivery($url, null, false, $redirects, CallbackDeliveryFailure::RedirectRejected);
             }
 
             $redirects++;

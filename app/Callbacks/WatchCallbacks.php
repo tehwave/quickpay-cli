@@ -23,6 +23,7 @@ final readonly class WatchCallbacks
         string $apiKey,
         CallbackRequest $request,
         int $interval,
+        int $deliveryAttempts,
         Closure $observer,
     ): void {
         $this->watchers->make($quickpay, $this->http)->run(
@@ -32,6 +33,7 @@ final readonly class WatchCallbacks
             apiKey: $apiKey,
             privateKey: $this->privateKeys->resolve($quickpay),
             interval: $interval,
+            deliveryAttempts: $deliveryAttempts,
             observer: $observer,
         );
     }

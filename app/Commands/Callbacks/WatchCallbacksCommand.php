@@ -24,9 +24,21 @@ class WatchCallbacksCommand extends AuthenticatedCommand
         {payment-id? : Quickpay payment ID. Omit to watch all payments}
         {--order-id= : Wait for and watch one payment by its order ID}
         {--to= : HTTP or HTTPS callback destination}
-        {--interval=2 : Poll and retry interval in seconds (1-60)}';
+        {--interval=2 : Poll and retry interval in seconds (1-60)}
+        {--delivery-attempts=5 : Maximum callback delivery attempts including the initial POST (1-60)}';
 
     protected $description = 'Watch payment operations and stream signed Quickpay callbacks';
+
+    protected $help = <<<'HELP'
+        Network/no-response failures and HTTP 408, 425, 429, and 5xx are retryable.
+        All other unsuccessful HTTP statuses, including 405, and rejected redirects are terminal.
+        Five attempts are made by default, including the initial POST, using --interval between attempts.
+        Terminal or exhausted delivery exits with status 1.
+
+        The failed operation is not skipped, and later operations are not delivered.
+        Fix the endpoint and run callbacks:replay <payment-id> --to=<corrected-url> to
+        resend the current payment state.
+        HELP;
 
     public function handle(
         AuthenticatedQuickpayFactory $quickpay,
@@ -41,6 +53,7 @@ class WatchCallbacksCommand extends AuthenticatedCommand
                     $this->option('to'),
                 );
                 $interval = $this->interval();
+                $deliveryAttempts = $this->deliveryAttempts();
                 $apiKey = $authenticated->apiKey->value();
 
                 if ($request->paymentId !== null || $request->orderId !== null) {
@@ -54,6 +67,7 @@ class WatchCallbacksCommand extends AuthenticatedCommand
                     $apiKey,
                     $request,
                     $interval,
+                    $deliveryAttempts,
                     function (string $event, array $context) use ($apiKey, $request): void {
                         $this->writeWatchEvent($event, $context, $apiKey, $request->target->url);
                     },
@@ -62,6 +76,21 @@ class WatchCallbacksCommand extends AuthenticatedCommand
                 return self::SUCCESS;
             },
         );
+    }
+
+    private function deliveryAttempts(): int
+    {
+        try {
+            $deliveryAttempts = IntegerInput::positive($this->option('delivery-attempts'), 'delivery-attempts');
+        } catch (InvalidArgumentException) {
+            throw new InvalidArgumentException('delivery-attempts must be an integer from 1 through 60.');
+        }
+
+        if ($deliveryAttempts > 60) {
+            throw new InvalidArgumentException('delivery-attempts must be an integer from 1 through 60.');
+        }
+
+        return $deliveryAttempts;
     }
 
     private function interval(): int
@@ -87,6 +116,9 @@ class WatchCallbacksCommand extends AuthenticatedCommand
         $operation = isset($context['payment_id'])
             ? "payment {$value('payment_id')} operation {$value('operation_id')}"
             : "operation {$value('operation_id')}";
+        $deliveryStatus = ($context['status'] ?? null) === null
+            ? 'no HTTP response'
+            : "HTTP {$value('status')}";
 
         if ($event === 'watching-all') {
             $this->info('Watching all Quickpay payment callbacks. Press Ctrl-C to stop.');
@@ -100,7 +132,7 @@ class WatchCallbacksCommand extends AuthenticatedCommand
             'watching' => $this->line("Payment {$value('payment_id')} ready; {$value('baseline_operations')} existing operation(s) baselined."),
             'payment-found' => $this->line("Order {$value('order_id')} created payment {$value('payment_id')}."),
             'multiple-operations' => $this->warn("Detected {$value('count')} operations in one poll; forwarding one callback per operation with the same latest payment snapshot."),
-            'delivery-retry' => $this->warn("Callback for {$operation} failed (HTTP {$value('status')}); retrying before later operations."),
+            'delivery-retry' => $this->warn("Callback for {$operation} failed on attempt {$value('attempt')} of {$value('maximum_attempts')} ({$deliveryStatus}); retrying in {$value('delay')} second(s) before later operations."),
             'polling-retry' => $this->warn("Quickpay polling failed (HTTP {$value('status')}); retrying in {$value('delay')} second(s)."),
             'delivered' => $this->info("Delivered callback for {$operation} with HTTP {$value('status')}."),
             default => null,

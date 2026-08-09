@@ -66,4 +66,22 @@ account. It may forward data from any payment changed during that session, not
 only the payment involved in the developer's current checkout flow. Use a
 selector when the destination should receive data for only one payment.
 
+Callback delivery is bounded to five attempts by default, including the initial
+POST; `--delivery-attempts` accepts limits from 1 through 60. The same captured
+body and HMAC signature are reused for every attempt, with the fixed
+`--interval` delay only before another attempt. Network failures, HTTP 408, 425,
+429, and 5xx responses are retryable. Other unsuccessful HTTP responses and
+rejected redirects are terminal; callback destinations cannot extend delivery
+with `Retry-After` or request unlimited retries.
+
+The watcher preserves FIFO delivery. A failed operation is never marked
+delivered, and no later operation is forwarded after a terminal or exhausted
+failure. The command reports safe HTTP or no-response context on stderr and
+exits with status 1. After fixing the endpoint, explicitly recover the blocked
+payment with the corrected `--to` URL:
+
+```bash
+quickpay callbacks:replay <payment-id> --to=<corrected-url>
+```
+
 Quickpay's hosted API, Manager, payment window, and merchant configuration are outside this project's control and should be reported to Quickpay through its official channels.

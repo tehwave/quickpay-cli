@@ -65,10 +65,11 @@ final class CallbackWatchRunner implements CallbackWatcher
         string $apiKey,
         string $privateKey,
         int $interval,
+        int $deliveryAttempts,
         Closure $observer,
     ): void {
         if ($paymentId === null && $orderId === null) {
-            $this->runAccountWide($target, $apiKey, $privateKey, $interval, $observer);
+            $this->runAccountWide($target, $apiKey, $privateKey, $interval, $deliveryAttempts, $observer);
 
             return;
         }
@@ -134,6 +135,7 @@ final class CallbackWatchRunner implements CallbackWatcher
                     $privateKey,
                     $target,
                     $interval,
+                    $deliveryAttempts,
                     $observer,
                 );
                 $known[$operation['id']] = true;
@@ -147,6 +149,7 @@ final class CallbackWatchRunner implements CallbackWatcher
         string $apiKey,
         string $privateKey,
         int $interval,
+        int $deliveryAttempts,
         Closure $observer,
     ): void {
         $readiness = $this->nextWholeUtcSecond(($this->clock)());
@@ -191,6 +194,7 @@ final class CallbackWatchRunner implements CallbackWatcher
                         $privateKey,
                         $target,
                         $interval,
+                        $deliveryAttempts,
                         $observer,
                     );
                     $known[$paymentId][$operation['id']] = true;
@@ -208,6 +212,7 @@ final class CallbackWatchRunner implements CallbackWatcher
         string $privateKey,
         CallbackTarget $target,
         int $interval,
+        int $deliveryAttempts,
         Closure $observer,
     ): void {
         $envelope = $this->envelopes->make(
@@ -217,18 +222,36 @@ final class CallbackWatchRunner implements CallbackWatcher
             $operationId,
         );
 
+        $attempt = 0;
+
         do {
+            $attempt++;
             $delivery = $this->forwarder->deliver($target, $envelope);
 
-            if (! $delivery->successful) {
-                $observer('delivery-retry', [
-                    'payment_id' => $paymentId,
-                    'operation_id' => $operationId,
-                    'status' => $delivery->status,
-                ]);
-                ($this->sleep)($interval);
+            if ($delivery->successful) {
+                break;
             }
-        } while (! $delivery->successful);
+
+            if (! $delivery->isRetryable() || $attempt >= $deliveryAttempts) {
+                throw new CallbackDeliveryException(
+                    $paymentId,
+                    $operationId,
+                    $delivery,
+                    $attempt,
+                    $deliveryAttempts,
+                );
+            }
+
+            $observer('delivery-retry', [
+                'attempt' => $attempt,
+                'maximum_attempts' => $deliveryAttempts,
+                'delay' => $interval,
+                'payment_id' => $paymentId,
+                'operation_id' => $operationId,
+                'status' => $delivery->status,
+            ]);
+            ($this->sleep)($interval);
+        } while (true);
 
         $observer('delivered', [
             'payment_id' => $paymentId,

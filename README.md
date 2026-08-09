@@ -60,11 +60,26 @@ quickpay callbacks:watch --to=http://127.0.0.1:8000/quickpay/callback
 ```
 
 Leave the watcher running while testing the payment flow. It signs and sends
-payment updates to your local callback handler.
+payment updates to your local callback handler. Callback delivery makes at most
+five attempts by default, including the initial POST. Set a limit from 1 through
+60 with `--delivery-attempts`; `--interval` controls the fixed delay between
+attempts.
 
 With no selector, the watcher forwards new operation callbacks for every
 payment changed after it becomes ready. Pass a payment ID or `--order-id` to
-narrow the watch to one payment. Existing operations are not replayed.
+narrow the watch to one payment. Existing operations are not replayed. The
+watcher runs in the foreground and has no JSON mode.
+
+Network failures, HTTP 408, 425, 429, and 5xx responses are retryable. Other
+HTTP failures and rejected redirects stop immediately. Delivery stays FIFO: a
+failed operation is never marked delivered, and later operations are not
+skipped or forwarded. A terminal failure or exhausted attempt limit writes a
+safe error to stderr and exits with status 1. Fix the endpoint, then recover the
+blocked payment with:
+
+```bash
+quickpay callbacks:replay <payment-id> --to=<corrected-url>
+```
 
 ## Development
 

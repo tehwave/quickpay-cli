@@ -4,6 +4,7 @@ use App\Callbacks\Delivery\CallbackForwarder;
 use App\Callbacks\Delivery\CallbackTarget;
 use App\Callbacks\Resolution\PaymentLocator;
 use App\Callbacks\Signing\CallbackEnvelopeFactory;
+use App\Callbacks\Watching\CallbackDeliveryException;
 use App\Callbacks\Watching\CallbackWatcherFactory;
 use App\Callbacks\Watching\CallbackWatchRunner;
 use App\Quickpay\QuickpayClient;
@@ -38,6 +39,7 @@ it('starts account-wide watching at the next whole UTC second and scans an overl
         apiKey: 'api-key',
         privateKey: 'private-key',
         interval: 2,
+        deliveryAttempts: 5,
         observer: function (string $event, array $context) use (&$events): void {
             $events[] = [$event, $context];
         },
@@ -96,6 +98,7 @@ it('forwards only post-readiness operations across payments without colliding op
         apiKey: 'api-key',
         privateKey: 'private-key',
         interval: 2,
+        deliveryAttempts: 5,
         observer: function (string $event, array $context) use (&$events): void {
             $events[] = [$event, $context];
         },
@@ -161,6 +164,7 @@ it('overlaps scan windows by one second without redelivering known payment opera
         apiKey: 'api-key',
         privateKey: 'private-key',
         interval: 2,
+        deliveryAttempts: 5,
         observer: function (string $event, array $context) use (&$events): void {
             $events[] = [$event, $context];
         },
@@ -217,6 +221,7 @@ it('retries a failed account-wide scan without advancing its watermark', functio
         apiKey: 'api-key',
         privateKey: 'private-key',
         interval: 2,
+        deliveryAttempts: 5,
         observer: function (string $event, array $context) use (&$events): void {
             $events[] = [$event, $context];
         },
@@ -264,6 +269,7 @@ it('retries account-wide network and server failures against the same window', f
         apiKey: 'api-key',
         privateKey: 'private-key',
         interval: 2,
+        deliveryAttempts: 5,
         observer: function (string $event, array $context) use (&$events): void {
             $events[] = [$event, $context];
         },
@@ -313,6 +319,7 @@ it('treats invalid operation timestamps as fatal during account-wide watching', 
         apiKey: 'api-key',
         privateKey: 'private-key',
         interval: 2,
+        deliveryAttempts: 5,
         observer: fn (string $event, array $context): null => null,
     ))->toThrow(UnexpectedValueException::class, 'valid timestamp');
 
@@ -354,6 +361,7 @@ it('treats a changed payment without an operations list as fatal', function () {
         apiKey: 'api-key',
         privateKey: 'private-key',
         interval: 2,
+        deliveryAttempts: 5,
         observer: fn (string $event, array $context): null => null,
     ))->toThrow(UnexpectedValueException::class, 'malformed operations');
 });
@@ -381,6 +389,7 @@ it('baselines existing operations and forwards every later operation in order', 
         apiKey: 'api-key',
         privateKey: 'private-key',
         interval: 2,
+        deliveryAttempts: 5,
         observer: function (string $event, array $context) use (&$events): void {
             $events[] = [$event, $context];
         },
@@ -419,6 +428,7 @@ it('orders operations chronologically when decimal timestamps lose float precisi
         apiKey: 'api-key',
         privateKey: 'private-key',
         interval: 2,
+        deliveryAttempts: 5,
         observer: function (string $event, array $context) use (&$events): void {
             $events[] = [$event, $context];
         },
@@ -454,6 +464,7 @@ it('treats all operations as new when an order appears after watching starts', f
         apiKey: 'api-key',
         privateKey: 'private-key',
         interval: 3,
+        deliveryAttempts: 5,
         observer: function (string $event, array $context) use (&$events): void {
             $events[] = [$event, $context];
         },
@@ -465,7 +476,7 @@ it('treats all operations as new when an order appears after watching starts', f
         ->and($sleeps)->toBe([3]);
 });
 
-it('retries an unchanged captured envelope before delivering later operations', function () {
+it('retries an unchanged captured envelope before delivering later operations in FIFO order', function () {
     Http::fake([
         'https://api.quickpay.net/payments/42' => Http::sequence()
             ->push(watchPayment([]))
@@ -479,6 +490,7 @@ it('retries an unchanged captured envelope before delivering later operations', 
             ->push('', 204),
     ]);
     $sleeps = [];
+    $events = [];
     $runner = callbackWatchRunner($sleeps, 1);
 
     $runner->run(
@@ -488,7 +500,10 @@ it('retries an unchanged captured envelope before delivering later operations', 
         apiKey: 'api-key',
         privateKey: 'private-key',
         interval: 2,
-        observer: fn (string $event, array $context): null => null,
+        deliveryAttempts: 5,
+        observer: function (string $event, array $context) use (&$events): void {
+            $events[] = [$event, $context];
+        },
     );
 
     $requests = collect(Http::recorded())
@@ -503,7 +518,124 @@ it('retries an unchanged captured envelope before delivering later operations', 
         ->toBe($requests[1]->header('QuickPay-Checksum-Sha256'))
         ->and($requests[1]->header('QuickPay-Checksum-Sha256'))
         ->toBe($requests[2]->header('QuickPay-Checksum-Sha256'))
-        ->and($sleeps)->toBe([2, 2]);
+        ->and($sleeps)->toBe([2, 2])
+        ->and($events)->toContain(['delivery-retry', [
+            'attempt' => 1,
+            'maximum_attempts' => 5,
+            'delay' => 2,
+            'payment_id' => '42',
+            'operation_id' => '1',
+            'status' => 500,
+        ]])
+        ->and(collect($events)->where('0', 'delivered')->pluck('1.operation_id')->values()->all())
+        ->toBe(['1', '2']);
+});
+
+it('does not retry a terminal delivery failure or process later operations', function () {
+    Http::fake([
+        'https://api.quickpay.net/payments/42' => Http::sequence()
+            ->push(watchPayment([]))
+            ->push(watchPayment([
+                watchOperation(1, 'authorize', '2026-07-25T10:00:00Z'),
+                watchOperation(2, 'capture', '2026-07-25T10:01:00Z'),
+            ])),
+        'http://localhost/callback' => Http::response('method not allowed', 405),
+    ]);
+    $sleeps = [];
+    $runner = callbackWatchRunner($sleeps, 1);
+
+    expect(fn () => $runner->run(
+        paymentId: '42',
+        orderId: null,
+        target: CallbackTarget::fromString('http://localhost/callback'),
+        apiKey: 'api-key',
+        privateKey: 'private-key',
+        interval: 2,
+        deliveryAttempts: 5,
+        observer: fn (string $event, array $context): null => null,
+    ))->toThrow(CallbackDeliveryException::class, 'payment 42 operation 1 after attempt 1 of 5 (HTTP 405)');
+
+    $callbackRequests = collect(Http::recorded())
+        ->map(fn (array $record): Request => $record[0])
+        ->filter(fn (Request $request): bool => $request->url() === 'http://localhost/callback');
+
+    expect($callbackRequests)->toHaveCount(1)
+        ->and($sleeps)->toBe([2]);
+});
+
+it('stops after five persistent transient failures without processing later operations', function () {
+    Http::fake([
+        'https://api.quickpay.net/payments/42' => Http::sequence()
+            ->push(watchPayment([]))
+            ->push(watchPayment([
+                watchOperation(1, 'authorize', '2026-07-25T10:00:00Z'),
+                watchOperation(2, 'capture', '2026-07-25T10:01:00Z'),
+            ])),
+        'http://localhost/callback' => Http::sequence()
+            ->push('temporary failure', 503)
+            ->push('temporary failure', 503)
+            ->push('temporary failure', 503)
+            ->push('temporary failure', 503)
+            ->push('temporary failure', 503),
+    ]);
+    $sleeps = [];
+    $events = new ArrayObject;
+    $runner = callbackWatchRunner($sleeps, 1);
+
+    expect(fn () => $runner->run(
+        paymentId: '42',
+        orderId: null,
+        target: CallbackTarget::fromString('http://localhost/callback'),
+        apiKey: 'api-key',
+        privateKey: 'private-key',
+        interval: 2,
+        deliveryAttempts: 5,
+        observer: function (string $event, array $context) use ($events): void {
+            $events[] = [$event, $context];
+        },
+    ))->toThrow(CallbackDeliveryException::class, 'payment 42 operation 1 after attempt 5 of 5 (HTTP 503)');
+
+    $callbackRequests = collect(Http::recorded())
+        ->map(fn (array $record): Request => $record[0])
+        ->filter(fn (Request $request): bool => $request->url() === 'http://localhost/callback');
+
+    expect($callbackRequests)->toHaveCount(5)
+        ->and($sleeps)->toBe([2, 2, 2, 2, 2])
+        ->and(array_values(array_filter($events->getArrayCopy(), fn (array $event): bool => $event[0] === 'delivery-retry')))->toHaveCount(4)
+        ->and(array_values(array_filter($events->getArrayCopy(), fn (array $event): bool => $event[0] === 'delivered')))->toBeEmpty();
+});
+
+it('disables delivery retries when the attempt limit is one', function () {
+    Http::fake([
+        'https://api.quickpay.net/payments/42' => Http::sequence()
+            ->push(watchPayment([]))
+            ->push(watchPayment([watchOperation(1, 'authorize', '2026-07-25T10:00:00Z')])),
+        'http://localhost/callback' => Http::response('temporary failure', 503),
+    ]);
+    $sleeps = [];
+    $events = new ArrayObject;
+    $runner = callbackWatchRunner($sleeps, 1);
+
+    expect(fn () => $runner->run(
+        paymentId: '42',
+        orderId: null,
+        target: CallbackTarget::fromString('http://localhost/callback'),
+        apiKey: 'api-key',
+        privateKey: 'private-key',
+        interval: 2,
+        deliveryAttempts: 1,
+        observer: function (string $event, array $context) use ($events): void {
+            $events[] = [$event, $context];
+        },
+    ))->toThrow(CallbackDeliveryException::class, 'after attempt 1 of 1 (HTTP 503)');
+
+    $callbackRequests = collect(Http::recorded())
+        ->map(fn (array $record): Request => $record[0])
+        ->filter(fn (Request $request): bool => $request->url() === 'http://localhost/callback');
+
+    expect($callbackRequests)->toHaveCount(1)
+        ->and($sleeps)->toBe([2])
+        ->and(array_values(array_filter($events->getArrayCopy(), fn (array $event): bool => $event[0] === 'delivery-retry')))->toBeEmpty();
 });
 
 it('honors a numeric retry-after while polling Quickpay', function () {
@@ -523,6 +655,7 @@ it('honors a numeric retry-after while polling Quickpay', function () {
         apiKey: 'api-key',
         privateKey: 'private-key',
         interval: 2,
+        deliveryAttempts: 5,
         observer: function (string $event, array $context) use (&$events): void {
             $events[] = [$event, $context];
         },

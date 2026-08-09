@@ -55,6 +55,7 @@ quickpay payments:refund <id> <amount> [--vat-rate=value] [--synchronized]
 quickpay payments:cancel <id> [--synchronized] [--callback-url=url] [--yes] [--json]
 quickpay callbacks:replay [<payment-id>] --to=url [--order-id=value] [--json]
 quickpay callbacks:watch [<payment-id>] --to=url [--order-id=value] [--interval=2]
+  [--delivery-attempts=5]
 quickpay api <GET|POST|PUT|PATCH|DELETE> <path> [--query=key=value]...
   [--data=key=value]... [--data-json='{}'] [--header='name:value']... [--yes] [--json]
 ```
@@ -82,12 +83,25 @@ destination before running either command. Do not invent a public endpoint,
 silently start a tunnel, or substitute `--callback-url`: that option tells
 Quickpay's servers where to deliver and localhost is not reachable from them.
 
-Watch has no JSON mode and does not replay existing operations. It retries a
-failed captured callback before later operations and runs until the user stops
-it with Ctrl-C. `QUICKPAY_PRIVATE_KEY` is an optional sensitive environment
-override; never ask the user to paste it into chat or place it in a command
-argument. Without it, the CLI retrieves the key through the authenticated API
-and retains it only in memory.
+Watch has no JSON mode and does not replay existing operations. It runs until
+the user stops it with Ctrl-C, a callback delivery fails terminally, or its
+attempt limit is exhausted. Delivery is FIFO and never skips a blocked
+operation. Each captured callback gets five attempts by default, including the
+initial POST; `--delivery-attempts` accepts 1 through 60, and `--interval` is the
+fixed delay between attempts. Network failures, HTTP 408, 425, 429, and 5xx
+responses are retryable. Other HTTP failures and rejected redirects are
+terminal. A terminal or exhausted failure leaves the operation undelivered,
+blocks later operations, writes the safe failure to stderr, and exits 1. Fix the
+endpoint and recover with:
+
+```bash
+quickpay callbacks:replay <payment-id> --to=<corrected-url>
+```
+
+`QUICKPAY_PRIVATE_KEY` is an optional sensitive environment override; never
+ask the user to paste it into chat or place it in a command argument. Without
+it, the CLI retrieves the key through the authenticated API and retains it only
+in memory.
 
 ## Raw API guardrails
 

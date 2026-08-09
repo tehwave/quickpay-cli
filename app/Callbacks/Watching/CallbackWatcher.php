@@ -23,6 +23,7 @@ interface CallbackWatcher
         string $apiKey,
         string $privateKey,
         int $interval,
+        int $deliveryAttempts,
         Closure $observer,
     ): void;
 }
