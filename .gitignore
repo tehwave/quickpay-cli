@@ -1,0 +1,9 @@
+/vendor
+/builds/
+/.idea
+/.vscode
+/.vagrant
+/.superpowers
+/.codex
+.phpunit.result.cache
+/docs/superpowers/*

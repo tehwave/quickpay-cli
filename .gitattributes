@@ -1,0 +1,11 @@
+* text=auto eol=lf
+/.agents export-ignore
+/.github export-ignore
+/.gitignore export-ignore
+/AGENTS.md export-ignore
+CONTRIBUTING.md export-ignore
+/RELEASING.md export-ignore
+/docs export-ignore
+/phpstan.neon export-ignore
+/phpunit.xml.dist export-ignore
+/tests export-ignore

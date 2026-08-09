@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+release_version="${1:-}"
+release_dist="${2:-builds/release}"
+
+if [[ ! "$release_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+    echo "Usage: scripts/build-release MAJOR.MINOR.PATCH [output-directory]" >&2
+    exit 64
+fi
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+project_root="$(cd -- "$script_dir/.." && pwd)"
+
+cd "$project_root"
+
+composer_version="$(
+    composer --version --no-ansi 2>/dev/null \
+        | awk '$1 == "Composer" && $2 == "version" { print $3; exit }'
+)"
+
+if [[ -z "$composer_version" ]]; then
+    echo "Unable to determine the Composer version." >&2
+    exit 1
+fi
+
+if [[ "$composer_version" != "2.10.2" ]]; then
+    echo "Release builds require Composer 2.10.2; found $composer_version." >&2
+    exit 1
+fi
+
+# Install the lock file with the same root identity used by CI before testing
+# or compiling the release artifact.
+COMPOSER_ROOT_VERSION=dev-main composer install --no-interaction --no-progress --prefer-dist
+composer verify
+
+# The release runner is disposable. Remove development-only packages before
+# compiling so the standalone PHAR contains only the runtime dependency graph.
+COMPOSER_ROOT_VERSION=dev-main composer install --no-dev --no-interaction --no-progress --prefer-dist
+php quickpay app:build quickpay --build-version="$release_version" --no-interaction
+
+test "$(builds/quickpay --version)" = "Quickpay $release_version"
+builds/quickpay list --raw
+git diff --check
+
+install -d "$release_dist"
+install -m 0755 builds/quickpay "$release_dist/quickpay"
+
+if command -v sha256sum >/dev/null 2>&1; then
+    (cd "$release_dist" && sha256sum quickpay > quickpay.sha256)
+else
+    (cd "$release_dist" && shasum -a 256 quickpay > quickpay.sha256)
+fi
+
+(cd "$release_dist" && tar -czf "quickpay-$release_version.tar.gz" quickpay quickpay.sha256)
+
+printf 'Built and verified Quickpay %s in %s\n' "$release_version" "$release_dist"
