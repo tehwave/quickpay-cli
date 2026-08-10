@@ -87,16 +87,9 @@ git diff --check
 also enforces at least 90% application coverage, validates package metadata,
 and audits the locked dependencies. Coverage requires PCOV or Xdebug.
 
-If packaging behavior changes, also exercise the ignored development artifact:
-
-```bash
-composer build
-builds/quickpay --version
-builds/quickpay list --raw
-```
-
-Generated files beneath `builds/` are never committed. The release workflow
-builds the versioned PHAR from a tagged source commit.
+The versioned `builds/quickpay` PHAR is the only tracked build output because
+Packagist installs it directly. Do not update it in an ordinary contribution;
+maintainers build and commit it in a release pull request.
 
 ## Pull requests
 

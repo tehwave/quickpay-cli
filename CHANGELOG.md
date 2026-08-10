@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Packagist releases now install the bundled PHAR without Laravel Zero's
+  dependency graph, using a single Quality-gated release build, signed tag, and
+  manually published immutable GitHub release.
+
+### Removed
+
+- Automated GitHub release publication, custom release scripts, and the
+  separate development PHAR. Releases now use Laravel Zero's native build
+  command, the `Quality` workflow, and one committed `builds/quickpay` binary.
+
 ## [0.1.0] - 2026-08-09
 
 ### Added

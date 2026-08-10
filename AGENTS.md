@@ -3,8 +3,8 @@
 ## Project
 
 This is a PHP 8.4+ command-line client for Quickpay, built with Laravel Zero 12.
-It targets Quickpay API v10. Composer installs the source package and `quickpay`
-launcher; GitHub releases additionally publish a generated standalone PHAR.
+It targets Quickpay API v10. Composer and GitHub releases distribute the same
+tracked standalone PHAR without installing Laravel Zero at runtime.
 
 Use `php quickpay` when running from source. See `README.md` for the public
 command reference and `skills/quickpay/SKILL.md` for the agent-facing usage
@@ -92,19 +92,15 @@ as security-sensitive. Include hostile and malformed inputs in their tests.
 
 ## Packaging
 
-`builds/` is ignored generated output. Do not commit a PHAR. After packaged
-runtime code, configuration, Composer inputs, the launcher, or `box.json`
-changes, run:
+`builds/quickpay` is the tracked Packagist binary. Other files beneath
+`builds/` are ignored generated output. Do not update the tracked release binary
+in an ordinary change. Develop and test from source with `php quickpay`.
 
-```bash
-composer build
-builds/quickpay --version
-builds/quickpay list --raw
-```
-
-Use `composer release:build -- 1.0.0` only for a versioned release candidate.
-Follow `RELEASING.md`; the GitHub workflow publishes artifacts without writing
-generated binaries back to the source branch.
+For a release candidate, run `composer verify`, then build with
+`php quickpay app:build quickpay --build-version=1.0.0 --no-interaction` and
+smoke-test `builds/quickpay`. Commit that one binary in the release pull request.
+Follow `RELEASING.md`; after `Quality` passes, maintainers sign the tag and
+manually publish that exact committed binary without rebuilding it.
 
 ## Verification
 

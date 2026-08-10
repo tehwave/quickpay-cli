@@ -85,16 +85,9 @@ verify` additionally enforces coverage, validates package metadata, and audits
 the locked dependencies. The test suite uses HTTP fakes and does not contact
 Quickpay API.
 
-Build an ignored development PHAR when packaging behavior changes:
-
-```bash
-composer build
-builds/quickpay --version
-builds/quickpay list --raw
-```
-
-The PHAR is a generated release artifact, not repository source. Versioned
-release artifacts are built with `composer release:build -- 1.0.0`.
+The versioned `builds/quickpay` PHAR is tracked so Packagist can install it
+without Laravel Zero's dependency graph. Maintainers build it with Laravel
+Zero's `app:build` command and commit it as described in `RELEASING.md`.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) before changing commands or security behavior.
 

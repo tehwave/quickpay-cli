@@ -1,5 +1,7 @@
 /vendor
-/builds/
+# Packagist installs this one committed PHAR; every other build is generated.
+/builds/*
+!/builds/quickpay
 /.idea
 /.vscode
 /.vagrant
