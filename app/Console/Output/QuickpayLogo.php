@@ -23,6 +23,6 @@ ASCII;
 
     public static function styled(): string
     {
-        return '<fg=green;options=bold>'.self::ASCII.'</>';
+        return '<fg=#fc1154;options=bold>'.self::ASCII.'</>';
     }
 }
