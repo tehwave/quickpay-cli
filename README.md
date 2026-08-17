@@ -1,3 +1,5 @@
+![](https://banners.beyondco.de/Quickpay%20CLI.png?theme=light&packageManager=composer+require&packageName=tehwave%2Fquickpay-cli&pattern=wiggle&style=style_1&description=Manage+Quickpay+payments+and+test+callbacks+from+your+terminal.&md=1&showWatermark=1&fontSize=100px&images=terminal)
+
 # Quickpay CLI
 
 [![Quality](https://github.com/tehwave/quickpay-cli/actions/workflows/quality.yml/badge.svg)](https://github.com/tehwave/quickpay-cli/actions/workflows/quality.yml)
