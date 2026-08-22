@@ -9,3 +9,4 @@
 /.codex
 .phpunit.result.cache
 /docs/superpowers/*
+.DS_Store
