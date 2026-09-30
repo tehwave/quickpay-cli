@@ -281,3 +281,26 @@ it('explains that environment credentials remain after local removal', function 
     expect(getenv('QUICKPAY_API_KEY'))->toBe('fake-environment');
     Http::assertNothingSent();
 });
+
+it('rejects ambiguous configuration before checking API access', function (bool $project): void {
+    $this->store->add('shop-a', 'fake-first');
+    $this->store->add('shop-b', 'fake-last');
+    $path = $project ? getcwd().'/.quickpay-cli.json' : $this->store->path();
+    $contents = $project
+        ? '{"merchant":"shop-a","merch\\u0061nt":"shop-b"}'
+        : '{"default_merchant":"shop-a","merchants":{"shop-a":{"api_key":"fake-first"},"sh\\u006fp-a":{"api_key":"fake-last"}}}';
+    file_put_contents($path, $contents);
+    Http::fake(['*' => Http::response(['scope' => 'merchant'])]);
+    [$exit, $output, $errors] = merchantCommandResult(ActiveMerchantCommand::class, ['--check' => true, '--json' => true]);
+    expect($exit)->toBe(1)->and($output)->toBe('')->and($errors)->not->toBe('')
+        ->and(file_get_contents($path))->toBe($contents);
+    Http::assertNothingSent();
+})->with(['store' => false, 'project' => true]);
+
+it('never lists labels that expose another saved API key', function (): void {
+    file_put_contents($this->store->path(), '{"default_merchant":"shop-a","merchants":{"shop-a":{"api_key":"fake-secret-a"},"fake-secret-a":{"api_key":"fake-secret-b"}}}');
+    [$exit, $output, $errors] = merchantCommandResult(ListMerchantsCommand::class, ['--json' => true]);
+    expect($exit)->toBe(1)->and($output)->toBe('')
+        ->and($errors)->not->toContain('fake-secret-a', 'fake-secret-b');
+    Http::assertNothingSent();
+});

@@ -69,7 +69,7 @@ final readonly class ProjectMerchantFile
             throw new CredentialException('Project merchant binding cannot be read.');
         }
         try {
-            $config = json_decode($contents, flags: JSON_THROW_ON_ERROR);
+            $config = MerchantConfigurationJson::decode($contents);
         } catch (JsonException) {
             throw new CredentialException('Project merchant binding is invalid JSON.');
         }

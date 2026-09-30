@@ -36,7 +36,7 @@ final readonly class MerchantStore
         }
 
         try {
-            $config = json_decode($contents, flags: JSON_THROW_ON_ERROR);
+            $config = MerchantConfigurationJson::decode($contents);
         } catch (JsonException) {
             throw new CredentialException('Quickpay CLI merchant configuration is invalid JSON.');
         }
@@ -64,9 +64,9 @@ final readonly class MerchantStore
                 || trim($merchant->api_key) === '') {
                 throw new CredentialException('Quickpay CLI merchant configuration contains an invalid credential.');
             }
-            $this->validateLabel((string) $name, $merchant->api_key);
             $merchants[$name] = ['api_key' => $merchant->api_key];
         }
+        $this->validateLabels($merchants);
 
         if ($config->default_merchant !== null && ! isset($merchants[$config->default_merchant])) {
             throw new CredentialException('Quickpay CLI default merchant is not saved.');
@@ -92,6 +92,7 @@ final readonly class MerchantStore
                 $config['default_merchant'] = $name;
             }
             $config['merchants'][$name] = ['api_key' => $apiKey];
+            $this->validateLabels($config['merchants']);
 
             return $config;
         });
@@ -126,6 +127,17 @@ final readonly class MerchantStore
     {
         if (CredentialRedactor::containsSensitiveValue($name, $apiKey)) {
             throw new CredentialException('Merchant name must not contain the API key.');
+        }
+    }
+
+    /** @param array<string, array{api_key: string}> $merchants */
+    private function validateLabels(array $merchants): void
+    {
+        // ponytail: quadratic check for the small registry; cache a multi-key matcher if large registries become common.
+        foreach ($merchants as $name => $merchant) {
+            foreach ($merchants as $credential) {
+                $this->validateLabel($name, $credential['api_key']);
+            }
         }
     }
 

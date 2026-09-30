@@ -41,6 +41,8 @@ it('rejects malformed nearest bindings without falling back or overwriting', fun
     'secret' => '{"merchant":"shop-a","api_key":"fake-secret"}',
     'url' => '{"merchant":"shop-a","url":"https://other.test"}',
     'headers' => '{"merchant":"shop-a","headers":{}}', 'invalid name' => '{"merchant":"Shop-a"}',
+    'duplicate selector' => '{"merchant":"shop-a","merchant":"shop-b"}',
+    'escaped duplicate selector' => '{"merchant":"shop-a","merch\\u0061nt":"shop-b"}',
 ]);
 
 it('rejects a directory masquerading as a project file', function (): void {

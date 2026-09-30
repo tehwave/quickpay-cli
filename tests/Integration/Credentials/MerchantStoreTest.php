@@ -58,6 +58,15 @@ it('replaces only the explicitly named credential', function (): void {
     ]);
 });
 
+it('rejects labels colliding with any saved credential without changing storage', function (bool $incomingKey): void {
+    $store = new MerchantStore($this->path);
+    $store->add('shop-a', 'fake-secret-a');
+    $before = file_get_contents($this->path);
+    expect(fn () => $store->add($incomingKey ? 'shop-b' : 'fake-secret-a', $incomingKey ? 'shop-a' : 'fake-secret-b'))
+        ->toThrow(CredentialException::class);
+    expect(file_get_contents($this->path))->toBe($before);
+})->with(['new label contains old key' => false, 'new key matches old label' => true]);
+
 it('writes object-shaped empty storage and restrictive modes', function (): void {
     $store = new MerchantStore($this->path);
     $store->add('shop-a', 'fake-secret-a');
@@ -89,7 +98,18 @@ it('rejects invalid storage without treating it as empty', function (string $con
     'dangling default' => '{"default_merchant":"shop-a","merchants":{}}',
     'old shape' => '{"api_key":"fake-legacy"}',
     'secret label' => '{"default_merchant":null,"merchants":{"secret-name":{"api_key":"secret"}}}',
+    'duplicate merchant' => '{"default_merchant":"shop-a","merchants":{"shop-a":{"api_key":"fake-first"},"shop-a":{"api_key":"fake-last"}}}',
+    'escaped duplicate merchant' => '{"default_merchant":"shop-a","merchants":{"shop-a":{"api_key":"fake-first"},"sh\\u006fp-a":{"api_key":"fake-last"}}}',
+    'duplicate key' => '{"default_merchant":"shop-a","merchants":{"shop-a":{"api_key":"fake-first","api_key":"fake-last"}}}',
+    'duplicate default' => '{"default_merchant":"shop-a","default_merchant":null,"merchants":{"shop-a":{"api_key":"fake-first"}}}',
 ]);
+
+it('does not mistake quoted key-like credential content for JSON properties', function (): void {
+    $key = 'fake-{"same":1,"same":2}-[]';
+    $store = new MerchantStore($this->path);
+    $store->add('shop-a', $key);
+    expect($store->read()['merchants']['shop-a']['api_key'])->toBe($key);
+});
 
 it('does not read old namespaced storage', function (): void {
     $old = $this->tempDirectory.'/.config/quickpay/config.json';
