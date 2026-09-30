@@ -10,21 +10,29 @@ use App\Quickpay\Exceptions\QuickpayRequestException;
 use App\Quickpay\QuickpayResponse;
 use Closure;
 use InvalidArgumentException;
+use Symfony\Component\Console\Input\InputOption;
 use UnexpectedValueException;
 
 abstract class AuthenticatedCommand extends BaseCommand
 {
+    public function __construct()
+    {
+        parent::__construct();
+        $this->addOption('merchant', null, InputOption::VALUE_REQUIRED, 'Saved merchant to select for this command');
+    }
+
     /** @param Closure(AuthenticatedQuickpay): int $callback */
     protected function withQuickpay(AuthenticatedQuickpayFactory $quickpay, Closure $callback): int
     {
         try {
-            $authenticated = $quickpay->resolve();
+            $merchant = $this->option('merchant');
+            $authenticated = $quickpay->resolve(is_string($merchant) ? $merchant : null);
         } catch (CredentialException $exception) {
             return $this->failure($exception->getMessage());
         }
 
         if ($authenticated === null) {
-            return $this->failure('No Quickpay credentials found. Run quickpay login first.');
+            return $this->failure('No Quickpay credentials found. Run quickpay merchants:add <name> first.');
         }
 
         try {

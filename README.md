@@ -35,13 +35,20 @@ Install the bundled skill for coding agents:
 skills add tehwave/quickpay-cli
 ```
 
-Authenticate with a Quickpay merchant API key:
+Save access to each merchant once. The CLI privately prompts for its API key:
 
 ```bash
-quickpay login
+quickpay merchants:add shop-a
 ```
 
-For automation, supply the API key through `QUICKPAY_API_KEY`.
+Credentials are stored in `~/.config/quickpay-cli/config.json` with a `0700`
+directory and `0600` file. Merchant names are local labels you choose, not verified
+Quickpay account names or merchant IDs. Names contain 1-64 lowercase ASCII
+letters, digits or single separating hyphens, starting with a letter.
+
+For automation, supply the API key through `QUICKPAY_API_KEY`. It cannot be
+combined with `--merchant` or a project binding; unset it before selecting a
+saved merchant.
 
 ## Usage
 
@@ -54,6 +61,49 @@ Use `--help` to explore any command and its options:
 ```bash
 quickpay callbacks:watch --help
 ```
+
+### Select a merchant
+
+```bash
+quickpay merchants:add shop-b
+quickpay merchants:list
+quickpay merchants:select shop-a
+quickpay merchants:select                 # Interactive picker
+quickpay merchants:active                 # Local configuration, no API request
+quickpay merchants:active --check --json  # Verify API access for automation
+quickpay payments:list --merchant=shop-b
+```
+
+The first saved merchant becomes the global default. Adding another merchant
+keeps that default. Select a different default with `merchants:select`, or use
+`--merchant` for one payment, callback or raw API command.
+
+Bind the current project without changing the global default:
+
+```bash
+quickpay merchants:select shop-b --local
+```
+
+Run this from the project root. It writes `.quickpay-cli.json` containing only
+`{"merchant":"shop-b"}`. Commands search the current directory and its parents
+for the nearest binding. Ignore this file in Git when the selection is specific
+to one developer. The selection order is an explicit `--merchant`, then the
+nearest project binding, then the global default. Unknown names and invalid
+bindings fail without silently switching to another merchant.
+
+`merchants:active` reports configuration. Add `--check` to verify the key against
+Quickpay; a missing or rejected credential exits non-zero. `--json` keeps the
+status machine-readable, with diagnostics on stderr.
+
+Rotate a saved key with `quickpay merchants:add shop-a --replace`. The old key
+remains intact if validation fails. `quickpay merchants:remove shop-a` removes
+only local access, never the remote account. Removing the default leaves no
+default; it does not select another saved merchant. Any binding to a removed
+merchant will fail until you select a valid one.
+
+This pre-v1 change replaces `login`, `logout` and `auth`. The old
+`~/.config/quickpay/config.json` is not read or migrated. Add each merchant again
+with `merchants:add`; after setup, you may remove the old file yourself.
 
 ### Watch for callbacks and relay them
 
