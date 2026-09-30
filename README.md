@@ -91,6 +91,12 @@ to one developer. The selection order is an explicit `--merchant`, then the
 nearest project binding, then the global default. Unknown names and invalid
 bindings fail without silently switching to another merchant.
 
+Each invocation resolves its merchant once. A running callback watcher stays
+attached to that merchant when another command changes selection or removes the
+saved credential. Mutation confirmations and watcher startup show the saved
+label and credential source; payment confirmations also show the API's merchant
+ID when available. These messages go to stderr in JSON mode.
+
 `merchants:active` reports configuration. Add `--check` to verify the key against
 Quickpay; a missing or rejected credential exits non-zero. `--json` keeps the
 status machine-readable, with diagnostics on stderr.
@@ -118,6 +124,10 @@ With no selector, the watcher forwards new operation callbacks for every
 payment changed after it becomes ready. Pass a payment ID or `--order-id` to
 narrow the watch to one payment. Existing operations are not replayed. The
 watcher runs in the foreground and has no JSON mode.
+
+An explicit `QUICKPAY_PRIVATE_KEY` must belong to the selected merchant. Without
+that override, the CLI fetches the signing key through the same merchant's API
+access and keeps it only in memory.
 
 
 ```bash

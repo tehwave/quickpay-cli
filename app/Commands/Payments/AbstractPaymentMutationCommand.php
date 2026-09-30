@@ -39,11 +39,11 @@ abstract class AbstractPaymentMutationCommand extends AuthenticatedCommand
                 body: $body,
                 query: $query,
                 headers: $headers,
-                confirm: function (array $payment) use ($apiKey, $body, $confirmation, $presenter): bool {
+                confirm: function (array $payment) use ($authenticated, $body, $confirmation, $presenter): bool {
                     $this->writeMutationSummary(
                         $payment,
                         $body['amount'] ?? null,
-                        $apiKey,
+                        $authenticated,
                         $presenter,
                     );
 
@@ -89,9 +89,11 @@ abstract class AbstractPaymentMutationCommand extends AuthenticatedCommand
     private function writeMutationSummary(
         array $payment,
         mixed $amount,
-        string $apiKey,
+        AuthenticatedQuickpay $authenticated,
         PaymentPresenter $presenter,
     ): void {
+        $this->writeMerchantContext($authenticated);
+        $apiKey = $authenticated->apiKey->value();
         $fields = [
             'Payment ID' => $payment['id'] ?? null,
             'Order ID' => $payment['order_id'] ?? null,
@@ -101,6 +103,10 @@ abstract class AbstractPaymentMutationCommand extends AuthenticatedCommand
             'Balance (minor units)' => $payment['balance'] ?? null,
             'Operation' => $this->operation(),
         ];
+
+        if (isset($payment['merchant_id'])) {
+            $fields = ['Merchant ID' => $payment['merchant_id'], ...$fields];
+        }
 
         if ($amount !== null) {
             $fields['Amount (minor units)'] = $amount;

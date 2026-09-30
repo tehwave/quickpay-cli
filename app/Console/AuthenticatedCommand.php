@@ -11,6 +11,7 @@ use App\Quickpay\QuickpayResponse;
 use Closure;
 use InvalidArgumentException;
 use Symfony\Component\Console\Input\InputOption;
+use Symfony\Component\Console\Output\OutputInterface;
 use UnexpectedValueException;
 
 abstract class AuthenticatedCommand extends BaseCommand
@@ -45,5 +46,18 @@ abstract class AuthenticatedCommand extends BaseCommand
     protected function responseFailure(QuickpayResponse $response, string $apiKey): int
     {
         return $this->failure(ResponseBodySanitizer::terminalLine($response->errorSummary(), $apiKey));
+    }
+
+    protected function writeMerchantContext(AuthenticatedQuickpay $authenticated): void
+    {
+        $output = $this->input->hasOption('json') && $this->input->getOption('json')
+            ? $this->getOutput()->getErrorStyle()
+            : $this->getOutput();
+        foreach ([
+            'Merchant: '.($authenticated->apiKey->merchant() ?? 'not associated with a saved merchant'),
+            'Credential source: '.$authenticated->apiKey->source(),
+        ] as $message) {
+            $output->writeln($authenticated->safeLine($message), OutputInterface::OUTPUT_RAW);
+        }
     }
 }

@@ -55,6 +55,7 @@ class WatchCallbacksCommand extends AuthenticatedCommand
                 $interval = $this->interval();
                 $deliveryAttempts = $this->deliveryAttempts();
                 $apiKey = $authenticated->apiKey->value();
+                $this->writeMerchantContext($authenticated);
 
                 if ($request->paymentId !== null || $request->orderId !== null) {
                     $this->info(ResponseBodySanitizer::terminalLine(

@@ -48,6 +48,7 @@ class ApiRequestCommand extends AuthenticatedCommand
             );
 
             if ($request->mutation) {
+                $this->writeMerchantContext($authenticated);
                 $this->writeSafetyLine("Quickpay API request: {$request->method}");
 
                 if (! $confirmation->approve(
