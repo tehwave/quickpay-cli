@@ -7,7 +7,7 @@ It targets Quickpay API v10. Composer and GitHub releases distribute the same
 tracked standalone PHAR without installing Laravel Zero at runtime.
 
 Use `php quickpay` when running from source. See `README.md` for the public
-command reference and `skills/quickpay/SKILL.md` for the agent-facing usage
+command reference and `skills/quickpay-cli/SKILL.md` for the agent-facing usage
 guide.
 
 ## Structure
@@ -65,7 +65,7 @@ validation, and the locked-dependency audit.
 - Preserve raw API JSON in `--json` mode after sanitization. Keep
   machine-readable output on stdout and diagnostics or prompts on stderr.
 - Restore environment variables and other global state changed by a test.
-- Update `README.md`, command help, and `skills/quickpay/SKILL.md` when a command
+- Update `README.md`, command help, and `skills/quickpay-cli/SKILL.md` when a command
   or safety behavior changes.
 - Check current Quickpay documentation before changing API behavior; do not
   infer the remote contract solely from existing code.

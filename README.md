@@ -29,11 +29,15 @@ Quickpay CLI requires PHP 8.4 or newer.
 composer global require tehwave/quickpay-cli
 ```
 
-Install the bundled skill for coding agents:
+Install the bundled [quickpay-cli skill](skills/quickpay-cli/SKILL.md) for coding agents:
 
 ```bash
 skills add tehwave/quickpay-cli
 ```
+
+If you previously installed this project's skill as `quickpay`, remove that
+installed copy and run the installation command again. Check its origin before
+removal so an unrelated Quickpay skill stays intact.
 
 Save access to each merchant once. The CLI privately prompts for its API key:
 
