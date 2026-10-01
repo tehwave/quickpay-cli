@@ -4,11 +4,15 @@ use App\Commands\Payments\CancelPaymentCommand;
 use App\Commands\Payments\CapturePaymentCommand;
 use App\Commands\Payments\RefundPaymentCommand;
 use App\Console\Terminal\StdinTerminalDetector;
+use App\Credentials\ProjectMerchantFile;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Symfony\Component\Console\Tester\CommandTester;
 
 beforeEach(function () {
+    $this->merchantProjectDirectory = sys_get_temp_dir().'/quickpay-test-project-'.bin2hex(random_bytes(8));
+    mkdir($this->merchantProjectDirectory, 0700, true);
+    app()->instance(ProjectMerchantFile::class, new ProjectMerchantFile($this->merchantProjectDirectory));
     $this->originalApiKey = getenv('QUICKPAY_API_KEY');
     putenv('QUICKPAY_API_KEY=mutation-secret');
     app()->instance(StdinTerminalDetector::class, new class implements StdinTerminalDetector
@@ -21,6 +25,10 @@ beforeEach(function () {
 });
 
 afterEach(function () {
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($this->merchantProjectDirectory, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST) as $file) {
+        $file->isDir() ? rmdir($file->getPathname()) : unlink($file->getPathname());
+    }
+    rmdir($this->merchantProjectDirectory);
     if ($this->originalApiKey === false) {
         putenv('QUICKPAY_API_KEY');
     } else {

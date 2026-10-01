@@ -7,12 +7,12 @@ It targets Quickpay API v10. Composer and GitHub releases distribute the same
 tracked standalone PHAR without installing Laravel Zero at runtime.
 
 Use `php quickpay` when running from source. See `README.md` for the public
-command reference and `skills/quickpay/SKILL.md` for the agent-facing usage
+command reference and `skills/quickpay-cli/SKILL.md` for the agent-facing usage
 guide.
 
 ## Structure
 
-- `app/Commands` — thin command adapters grouped by API, authentication,
+- `app/Commands` — thin command adapters grouped by API, merchants,
   callbacks, and payments.
 - `app/Callbacks` — callback replay/watch workflows and their delivery,
   resolution, signing, and input capabilities.
@@ -65,7 +65,7 @@ validation, and the locked-dependency audit.
 - Preserve raw API JSON in `--json` mode after sanitization. Keep
   machine-readable output on stdout and diagnostics or prompts on stderr.
 - Restore environment variables and other global state changed by a test.
-- Update `README.md`, command help, and `skills/quickpay/SKILL.md` when a command
+- Update `README.md`, command help, and `skills/quickpay-cli/SKILL.md` when a command
   or safety behavior changes.
 - Check current Quickpay documentation before changing API behavior; do not
   infer the remote contract solely from existing code.
@@ -74,9 +74,15 @@ validation, and the locked-dependency audit.
 
 - Never expose an API key in output, errors, logs, fixtures, or command
   arguments. Preserve redaction of raw, Basic-auth, and encoded forms.
-- Credentials come from a non-empty `QUICKPAY_API_KEY` before
-  `~/.config/quickpay/config.json`. Stored credentials use atomic writes, a
-  `0700` directory, and a `0600` file.
+- Named credentials live in `~/.config/quickpay-cli/config.json`; never read or
+  migrate the old `~/.config/quickpay/config.json`. Stored credentials use locked
+  atomic writes, a `0700` directory, and a `0600` file.
+- Stored selection is explicit `--merchant`, nearest `.quickpay-cli.json`, then
+  global default. Invalid or stale selection never falls back silently.
+- A non-empty `QUICKPAY_API_KEY` bypasses saved storage when no explicit or
+  project selection exists; combining them fails before API requests.
+- Resolve credentials once per command, including long-running watchers. Plain
+  `merchants:active` is local status; `--check` verifies merchant API access.
 - The client owns the Quickpay host, authentication, API version, and JSON
   headers. Raw API input must not override them or escape the
   `api.quickpay.net` origin.

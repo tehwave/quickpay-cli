@@ -1,5 +1,10 @@
 <?php
 
+use League\Flysystem\CorruptedPathDetected;
+use League\Flysystem\Filesystem;
+use League\Flysystem\FilesystemAdapter;
+use League\Flysystem\WhitespacePathNormalizer;
+
 it('distributes the packaged binary without external Composer runtime dependencies', function (): void {
     $root = dirname(__DIR__, 2);
     $composer = json_decode(
@@ -23,3 +28,23 @@ it('distributes the packaged binary without external Composer runtime dependenci
         ->and($composer['bin'])->toBe(['builds/quickpay'])
         ->and($box['exclude-dev-files'])->toBeFalse();
 });
+
+it('rejects malformed paths before the bundled filesystem dispatches them', function (string $path): void {
+    $adapter = Mockery::mock(FilesystemAdapter::class);
+    $adapter->allows('fileExists')->andReturn(false);
+    $filesystem = new Filesystem($adapter);
+
+    expect(fn () => $filesystem->fileExists($path))->toThrow(CorruptedPathDetected::class);
+})->with([
+    'malformed UTF-8 and ESC' => "folder/\x80\x1bfile",
+    'malformed UTF-8 and newline' => "folder/\xff\nfile",
+    'malformed UTF-8 alone' => "folder/\x80file",
+]);
+
+it('preserves ordinary path normalization in the bundled filesystem', function (string $path, string $expected): void {
+    expect((new WhitespacePathNormalizer)->normalizePath($path))->toBe($expected);
+})->with([
+    'backslashes and dot segments' => ['folder\\.\\file', 'folder/file'],
+    'printable Unicode and spaces' => ['folder/my résumé.txt', 'folder/my résumé.txt'],
+    'relative resolution' => ['folder/../file', 'file'],
+]);

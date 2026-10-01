@@ -14,9 +14,9 @@ final readonly class AuthenticatedQuickpayFactory
         private ApiKeyResolver $credentials,
     ) {}
 
-    public function resolve(): ?AuthenticatedQuickpay
+    public function resolve(?string $merchant = null): ?AuthenticatedQuickpay
     {
-        $apiKey = $this->credentials->resolve();
+        $apiKey = $this->credentials->resolve($merchant);
 
         return $apiKey === null ? null : $this->from($apiKey);
     }

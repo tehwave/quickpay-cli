@@ -4,6 +4,7 @@ use App\Callbacks\Resolution\AccountPrivateKeyFetcher;
 use App\Callbacks\Resolution\PrivateKeyResolver;
 use App\Commands\Callbacks\ReplayCallbackCommand;
 use App\Credentials\EnvironmentVariables;
+use App\Credentials\ProjectMerchantFile;
 use App\Quickpay\QuickpayClient;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
@@ -11,6 +12,9 @@ use Illuminate\Support\Facades\Http;
 use Symfony\Component\Console\Tester\CommandTester;
 
 beforeEach(function () {
+    $this->merchantProjectDirectory = sys_get_temp_dir().'/quickpay-test-project-'.bin2hex(random_bytes(8));
+    mkdir($this->merchantProjectDirectory, 0700, true);
+    app()->instance(ProjectMerchantFile::class, new ProjectMerchantFile($this->merchantProjectDirectory));
     $this->originalApiKey = getenv('QUICKPAY_API_KEY');
     $this->originalPrivateKey = getenv('QUICKPAY_PRIVATE_KEY');
     putenv('QUICKPAY_API_KEY=replay-api-secret');
@@ -18,6 +22,10 @@ beforeEach(function () {
 });
 
 afterEach(function () {
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($this->merchantProjectDirectory, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST) as $file) {
+        $file->isDir() ? rmdir($file->getPathname()) : unlink($file->getPathname());
+    }
+    rmdir($this->merchantProjectDirectory);
     foreach ([
         'QUICKPAY_API_KEY' => $this->originalApiKey,
         'QUICKPAY_PRIVATE_KEY' => $this->originalPrivateKey,

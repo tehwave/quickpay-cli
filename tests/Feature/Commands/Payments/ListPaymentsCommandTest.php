@@ -2,18 +2,26 @@
 
 use App\Commands\Payments\ListPaymentsCommand;
 use App\Credentials\ApiKeyResolver;
-use App\Credentials\CredentialFile;
 use App\Credentials\EnvironmentVariables;
+use App\Credentials\MerchantStore;
+use App\Credentials\ProjectMerchantFile;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Symfony\Component\Console\Tester\CommandTester;
 
 beforeEach(function () {
+    $this->merchantProjectDirectory = sys_get_temp_dir().'/quickpay-test-project-'.bin2hex(random_bytes(8));
+    mkdir($this->merchantProjectDirectory, 0700, true);
+    app()->instance(ProjectMerchantFile::class, new ProjectMerchantFile($this->merchantProjectDirectory));
     $this->originalApiKey = getenv('QUICKPAY_API_KEY');
     putenv('QUICKPAY_API_KEY=list-secret');
 });
 
 afterEach(function () {
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($this->merchantProjectDirectory, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST) as $file) {
+        $file->isDir() ? rmdir($file->getPathname()) : unlink($file->getPathname());
+    }
+    rmdir($this->merchantProjectDirectory);
     if ($this->originalApiKey === false) {
         putenv('QUICKPAY_API_KEY');
     } else {
@@ -355,15 +363,15 @@ it('validates list pagination limits before making a request', function (array $
     [['--max-pages' => 'nope'], 'max-pages'],
 ]);
 
-it('fails safely with a login hint when credentials are missing', function () {
+it('fails safely with a merchant setup hint when credentials are missing', function () {
     putenv('QUICKPAY_API_KEY');
-    $file = new CredentialFile(sys_get_temp_dir().'/missing-quickpay-'.bin2hex(random_bytes(6)).'.json');
-    app()->instance(CredentialFile::class, $file);
-    app()->instance(ApiKeyResolver::class, new ApiKeyResolver(new EnvironmentVariables, $file));
+    $file = new MerchantStore(sys_get_temp_dir().'/missing-quickpay-'.bin2hex(random_bytes(6)).'.json');
+    app()->instance(MerchantStore::class, $file);
+    app()->instance(ApiKeyResolver::class, new ApiKeyResolver(new EnvironmentVariables, $file, app(ProjectMerchantFile::class)));
     Http::fake();
 
     $this->artisan('payments:list')
-        ->expectsOutputToContain('quickpay login')
+        ->expectsOutputToContain('quickpay merchants:add <name>')
         ->assertExitCode(1);
 
     Http::assertNothingSent();
