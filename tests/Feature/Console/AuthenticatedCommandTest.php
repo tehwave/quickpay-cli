@@ -1,8 +1,9 @@
 <?php
 
-use App\Callbacks\Delivery\CallbackTarget;
 use App\Callbacks\Watching\CallbackWatcher;
 use App\Callbacks\Watching\CallbackWatcherFactory;
+use App\Callbacks\Watching\CallbackWatchObserver;
+use App\Callbacks\Watching\CallbackWatchRequest;
 use App\Commands\Api\ApiRequestCommand;
 use App\Commands\Callbacks\ReplayCallbackCommand;
 use App\Commands\Callbacks\WatchCallbacksCommand;
@@ -185,14 +186,14 @@ it('keeps scoped and account-wide watchers pinned after selection and removal', 
             {
                 public function __construct(private QuickpayClient $quickpay, private MerchantStore $store) {}
 
-                public function run(?string $paymentId, ?string $orderId, CallbackTarget $target, string $apiKey, string $privateKey, int $interval, int $deliveryAttempts, Closure $observer): void
+                public function run(CallbackWatchRequest $request, CallbackWatchObserver $observer): void
                 {
                     $this->store->select('shop-a');
                     $this->store->remove('shop-b');
                     $this->quickpay->get('/ping');
                     $this->quickpay->get('/ping');
-                    if ($paymentId === null) {
-                        $observer('watching-all', ['ready_at' => '2026-09-30T10:00:00+00:00']);
+                    if ($request->isAccountWide()) {
+                        $observer->watchingAllPayments(new DateTimeImmutable('2026-09-30T10:00:00+00:00'));
                     }
                 }
             };
@@ -277,7 +278,7 @@ it('warns before watching when QUICKPAY_PRIVATE_KEY signs callbacks for a saved 
         {
             return new class implements CallbackWatcher
             {
-                public function run(?string $paymentId, ?string $orderId, CallbackTarget $target, string $apiKey, string $privateKey, int $interval, int $deliveryAttempts, Closure $observer): void {}
+                public function run(CallbackWatchRequest $request, CallbackWatchObserver $observer): void {}
             };
         }
     });

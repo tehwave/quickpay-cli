@@ -6,6 +6,8 @@ use App\Callbacks\Resolution\PaymentLocator;
 use App\Callbacks\Signing\CallbackEnvelopeFactory;
 use App\Callbacks\Watching\CallbackDeliveryException;
 use App\Callbacks\Watching\CallbackWatcherFactory;
+use App\Callbacks\Watching\CallbackWatchObserver;
+use App\Callbacks\Watching\CallbackWatchRequest;
 use App\Callbacks\Watching\CallbackWatchRunner;
 use App\Credentials\MerchantAccess;
 use App\Quickpay\QuickpayClient;
@@ -34,16 +36,16 @@ it('starts account-wide watching at the next whole UTC second and scans an overl
     );
 
     $runner->run(
-        paymentId: null,
-        orderId: null,
-        target: CallbackTarget::fromString('http://localhost/callback'),
-        apiKey: 'api-key',
-        privateKey: 'private-key',
-        interval: 2,
-        deliveryAttempts: 5,
-        observer: function (string $event, array $context) use (&$events): void {
-            $events[] = [$event, $context];
-        },
+        new CallbackWatchRequest(
+            paymentId: null,
+            orderId: null,
+            target: CallbackTarget::fromString('http://localhost/callback'),
+            apiKey: 'api-key',
+            privateKey: 'private-key',
+            interval: 2,
+            deliveryAttempts: 5,
+        ),
+        recordedWatchEvents($events),
     );
 
     expect($waitedUntil)->toBe(['2026-08-07T10:00:01.000000+00:00'])
@@ -93,16 +95,16 @@ it('forwards only post-readiness operations across payments without colliding op
     );
 
     $runner->run(
-        paymentId: null,
-        orderId: null,
-        target: CallbackTarget::fromString('http://localhost/callback'),
-        apiKey: 'api-key',
-        privateKey: 'private-key',
-        interval: 2,
-        deliveryAttempts: 5,
-        observer: function (string $event, array $context) use (&$events): void {
-            $events[] = [$event, $context];
-        },
+        new CallbackWatchRequest(
+            paymentId: null,
+            orderId: null,
+            target: CallbackTarget::fromString('http://localhost/callback'),
+            apiKey: 'api-key',
+            privateKey: 'private-key',
+            interval: 2,
+            deliveryAttempts: 5,
+        ),
+        recordedWatchEvents($events),
     );
 
     $callbackPaymentIds = collect(Http::recorded())
@@ -159,16 +161,16 @@ it('overlaps scan windows by one second without redelivering known payment opera
     );
 
     $runner->run(
-        paymentId: null,
-        orderId: null,
-        target: CallbackTarget::fromString('http://localhost/callback'),
-        apiKey: 'api-key',
-        privateKey: 'private-key',
-        interval: 2,
-        deliveryAttempts: 5,
-        observer: function (string $event, array $context) use (&$events): void {
-            $events[] = [$event, $context];
-        },
+        new CallbackWatchRequest(
+            paymentId: null,
+            orderId: null,
+            target: CallbackTarget::fromString('http://localhost/callback'),
+            apiKey: 'api-key',
+            privateKey: 'private-key',
+            interval: 2,
+            deliveryAttempts: 5,
+        ),
+        recordedWatchEvents($events),
     );
 
     $delivered = collect($events)
@@ -216,16 +218,16 @@ it('retries a failed account-wide scan without advancing its watermark', functio
     );
 
     $runner->run(
-        paymentId: null,
-        orderId: null,
-        target: CallbackTarget::fromString('http://localhost/callback'),
-        apiKey: 'api-key',
-        privateKey: 'private-key',
-        interval: 2,
-        deliveryAttempts: 5,
-        observer: function (string $event, array $context) use (&$events): void {
-            $events[] = [$event, $context];
-        },
+        new CallbackWatchRequest(
+            paymentId: null,
+            orderId: null,
+            target: CallbackTarget::fromString('http://localhost/callback'),
+            apiKey: 'api-key',
+            privateKey: 'private-key',
+            interval: 2,
+            deliveryAttempts: 5,
+        ),
+        recordedWatchEvents($events),
     );
 
     $scanUrls = collect(Http::recorded())
@@ -264,16 +266,16 @@ it('retries account-wide network and server failures against the same window', f
     );
 
     $runner->run(
-        paymentId: null,
-        orderId: null,
-        target: CallbackTarget::fromString('http://localhost/callback'),
-        apiKey: 'api-key',
-        privateKey: 'private-key',
-        interval: 2,
-        deliveryAttempts: 5,
-        observer: function (string $event, array $context) use (&$events): void {
-            $events[] = [$event, $context];
-        },
+        new CallbackWatchRequest(
+            paymentId: null,
+            orderId: null,
+            target: CallbackTarget::fromString('http://localhost/callback'),
+            apiKey: 'api-key',
+            privateKey: 'private-key',
+            interval: 2,
+            deliveryAttempts: 5,
+        ),
+        recordedWatchEvents($events),
     );
 
     $scanUrls = collect(Http::recorded())
@@ -314,14 +316,16 @@ it('treats invalid operation timestamps as fatal during account-wide watching', 
     );
 
     expect(fn () => $runner->run(
-        paymentId: null,
-        orderId: null,
-        target: CallbackTarget::fromString('http://localhost/callback'),
-        apiKey: 'api-key',
-        privateKey: 'private-key',
-        interval: 2,
-        deliveryAttempts: 5,
-        observer: fn (string $event, array $context): null => null,
+        new CallbackWatchRequest(
+            paymentId: null,
+            orderId: null,
+            target: CallbackTarget::fromString('http://localhost/callback'),
+            apiKey: 'api-key',
+            privateKey: 'private-key',
+            interval: 2,
+            deliveryAttempts: 5,
+        ),
+        recordedWatchEvents(),
     ))->toThrow(UnexpectedValueException::class, 'valid timestamp');
 
     Http::assertNotSent(fn (Request $request): bool => $request->url() === 'http://localhost/callback');
@@ -356,14 +360,16 @@ it('treats a changed payment without an operations list as fatal', function () {
     );
 
     expect(fn () => $runner->run(
-        paymentId: null,
-        orderId: null,
-        target: CallbackTarget::fromString('http://localhost/callback'),
-        apiKey: 'api-key',
-        privateKey: 'private-key',
-        interval: 2,
-        deliveryAttempts: 5,
-        observer: fn (string $event, array $context): null => null,
+        new CallbackWatchRequest(
+            paymentId: null,
+            orderId: null,
+            target: CallbackTarget::fromString('http://localhost/callback'),
+            apiKey: 'api-key',
+            privateKey: 'private-key',
+            interval: 2,
+            deliveryAttempts: 5,
+        ),
+        recordedWatchEvents(),
     ))->toThrow(UnexpectedValueException::class, 'malformed operations');
 });
 
@@ -384,16 +390,16 @@ it('baselines existing operations and forwards every later operation in order', 
     $runner = callbackWatchRunner($sleeps, 1);
 
     $runner->run(
-        paymentId: '42',
-        orderId: null,
-        target: CallbackTarget::fromString('http://localhost/callback'),
-        apiKey: 'api-key',
-        privateKey: 'private-key',
-        interval: 2,
-        deliveryAttempts: 5,
-        observer: function (string $event, array $context) use (&$events): void {
-            $events[] = [$event, $context];
-        },
+        new CallbackWatchRequest(
+            paymentId: '42',
+            orderId: null,
+            target: CallbackTarget::fromString('http://localhost/callback'),
+            apiKey: 'api-key',
+            privateKey: 'private-key',
+            interval: 2,
+            deliveryAttempts: 5,
+        ),
+        recordedWatchEvents($events),
     );
 
     $localRequests = collect(Http::recorded())
@@ -423,16 +429,16 @@ it('orders operations chronologically when decimal timestamps lose float precisi
     $runner = callbackWatchRunner($sleeps, 1);
 
     $runner->run(
-        paymentId: '42',
-        orderId: null,
-        target: CallbackTarget::fromString('http://localhost/callback'),
-        apiKey: 'api-key',
-        privateKey: 'private-key',
-        interval: 2,
-        deliveryAttempts: 5,
-        observer: function (string $event, array $context) use (&$events): void {
-            $events[] = [$event, $context];
-        },
+        new CallbackWatchRequest(
+            paymentId: '42',
+            orderId: null,
+            target: CallbackTarget::fromString('http://localhost/callback'),
+            apiKey: 'api-key',
+            privateKey: 'private-key',
+            interval: 2,
+            deliveryAttempts: 5,
+        ),
+        recordedWatchEvents($events),
     );
 
     $delivered = collect($events)
@@ -459,16 +465,16 @@ it('treats all operations as new when an order appears after watching starts', f
     $events = [];
 
     $runner->run(
-        paymentId: null,
-        orderId: 'new-order',
-        target: CallbackTarget::fromString('http://localhost/callback'),
-        apiKey: 'api-key',
-        privateKey: 'private-key',
-        interval: 3,
-        deliveryAttempts: 5,
-        observer: function (string $event, array $context) use (&$events): void {
-            $events[] = [$event, $context];
-        },
+        new CallbackWatchRequest(
+            paymentId: null,
+            orderId: 'new-order',
+            target: CallbackTarget::fromString('http://localhost/callback'),
+            apiKey: 'api-key',
+            privateKey: 'private-key',
+            interval: 3,
+            deliveryAttempts: 5,
+        ),
+        recordedWatchEvents($events),
     );
 
     Http::assertSent(fn (Request $request): bool => $request->url() === 'http://localhost/callback');
@@ -495,16 +501,16 @@ it('retries an unchanged captured envelope before delivering later operations in
     $runner = callbackWatchRunner($sleeps, 1);
 
     $runner->run(
-        paymentId: '42',
-        orderId: null,
-        target: CallbackTarget::fromString('http://localhost/callback'),
-        apiKey: 'api-key',
-        privateKey: 'private-key',
-        interval: 2,
-        deliveryAttempts: 5,
-        observer: function (string $event, array $context) use (&$events): void {
-            $events[] = [$event, $context];
-        },
+        new CallbackWatchRequest(
+            paymentId: '42',
+            orderId: null,
+            target: CallbackTarget::fromString('http://localhost/callback'),
+            apiKey: 'api-key',
+            privateKey: 'private-key',
+            interval: 2,
+            deliveryAttempts: 5,
+        ),
+        recordedWatchEvents($events),
     );
 
     $requests = collect(Http::recorded())
@@ -546,14 +552,16 @@ it('does not retry a terminal delivery failure or process later operations', fun
     $runner = callbackWatchRunner($sleeps, 1);
 
     expect(fn () => $runner->run(
-        paymentId: '42',
-        orderId: null,
-        target: CallbackTarget::fromString('http://localhost/callback'),
-        apiKey: 'api-key',
-        privateKey: 'private-key',
-        interval: 2,
-        deliveryAttempts: 5,
-        observer: fn (string $event, array $context): null => null,
+        new CallbackWatchRequest(
+            paymentId: '42',
+            orderId: null,
+            target: CallbackTarget::fromString('http://localhost/callback'),
+            apiKey: 'api-key',
+            privateKey: 'private-key',
+            interval: 2,
+            deliveryAttempts: 5,
+        ),
+        recordedWatchEvents(),
     ))->toThrow(CallbackDeliveryException::class, 'payment 42 operation 1 after attempt 1 of 5 (HTTP 405)');
 
     $callbackRequests = collect(Http::recorded())
@@ -584,16 +592,16 @@ it('stops after five persistent transient failures without processing later oper
     $runner = callbackWatchRunner($sleeps, 1);
 
     expect(fn () => $runner->run(
-        paymentId: '42',
-        orderId: null,
-        target: CallbackTarget::fromString('http://localhost/callback'),
-        apiKey: 'api-key',
-        privateKey: 'private-key',
-        interval: 2,
-        deliveryAttempts: 5,
-        observer: function (string $event, array $context) use ($events): void {
-            $events[] = [$event, $context];
-        },
+        new CallbackWatchRequest(
+            paymentId: '42',
+            orderId: null,
+            target: CallbackTarget::fromString('http://localhost/callback'),
+            apiKey: 'api-key',
+            privateKey: 'private-key',
+            interval: 2,
+            deliveryAttempts: 5,
+        ),
+        recordedWatchEvents($events),
     ))->toThrow(CallbackDeliveryException::class, 'payment 42 operation 1 after attempt 5 of 5 (HTTP 503)');
 
     $callbackRequests = collect(Http::recorded())
@@ -618,16 +626,16 @@ it('disables delivery retries when the attempt limit is one', function () {
     $runner = callbackWatchRunner($sleeps, 1);
 
     expect(fn () => $runner->run(
-        paymentId: '42',
-        orderId: null,
-        target: CallbackTarget::fromString('http://localhost/callback'),
-        apiKey: 'api-key',
-        privateKey: 'private-key',
-        interval: 2,
-        deliveryAttempts: 1,
-        observer: function (string $event, array $context) use ($events): void {
-            $events[] = [$event, $context];
-        },
+        new CallbackWatchRequest(
+            paymentId: '42',
+            orderId: null,
+            target: CallbackTarget::fromString('http://localhost/callback'),
+            apiKey: 'api-key',
+            privateKey: 'private-key',
+            interval: 2,
+            deliveryAttempts: 1,
+        ),
+        recordedWatchEvents($events),
     ))->toThrow(CallbackDeliveryException::class, 'after attempt 1 of 1 (HTTP 503)');
 
     $callbackRequests = collect(Http::recorded())
@@ -650,16 +658,16 @@ it('honors a numeric retry-after while polling Quickpay', function () {
     $runner = callbackWatchRunner($sleeps, 0);
 
     $runner->run(
-        paymentId: '42',
-        orderId: null,
-        target: CallbackTarget::fromString('http://localhost/callback'),
-        apiKey: 'api-key',
-        privateKey: 'private-key',
-        interval: 2,
-        deliveryAttempts: 5,
-        observer: function (string $event, array $context) use (&$events): void {
-            $events[] = [$event, $context];
-        },
+        new CallbackWatchRequest(
+            paymentId: '42',
+            orderId: null,
+            target: CallbackTarget::fromString('http://localhost/callback'),
+            apiKey: 'api-key',
+            privateKey: 'private-key',
+            interval: 2,
+            deliveryAttempts: 5,
+        ),
+        recordedWatchEvents($events),
     );
 
     expect($sleeps)->toBe([7])
@@ -714,4 +722,75 @@ function callbackWatchRunner(
         clock: $clock,
         waitUntil: $waitUntil,
     );
+}
+
+/**
+ * Records observer calls as [event, context] pairs named after the watch events.
+ *
+ * @param  array<int, array{0: string, 1: array<string, int|string|null>}>|ArrayObject<int, mixed>  $events
+ */
+function recordedWatchEvents(array|ArrayObject &$events = []): CallbackWatchObserver
+{
+    return new class($events) implements CallbackWatchObserver
+    {
+        /** @param  array<int, mixed>|ArrayObject<int, mixed>  $events */
+        public function __construct(private array|ArrayObject &$events) {}
+
+        public function watchingAllPayments(DateTimeImmutable $readyAt): void
+        {
+            $this->events[] = ['watching-all', ['ready_at' => $readyAt->format(DateTimeImmutable::ATOM)]];
+        }
+
+        public function waitingForPayment(string $orderId): void
+        {
+            $this->events[] = ['waiting-for-payment', ['order_id' => $orderId]];
+        }
+
+        public function watchingPayment(string $paymentId, int $baselineOperations): void
+        {
+            $this->events[] = ['watching', ['payment_id' => $paymentId, 'baseline_operations' => $baselineOperations]];
+        }
+
+        public function paymentFound(string $paymentId, string $orderId): void
+        {
+            $this->events[] = ['payment-found', ['payment_id' => $paymentId, 'order_id' => $orderId]];
+        }
+
+        public function multipleOperations(int $count): void
+        {
+            $this->events[] = ['multiple-operations', ['count' => $count]];
+        }
+
+        public function deliveryRetrying(
+            string $paymentId,
+            string $operationId,
+            int $attempt,
+            int $maximumAttempts,
+            int $delay,
+            ?int $status,
+        ): void {
+            $this->events[] = ['delivery-retry', [
+                'attempt' => $attempt,
+                'maximum_attempts' => $maximumAttempts,
+                'delay' => $delay,
+                'payment_id' => $paymentId,
+                'operation_id' => $operationId,
+                'status' => $status,
+            ]];
+        }
+
+        public function pollingRetrying(?int $status, int $delay): void
+        {
+            $this->events[] = ['polling-retry', ['status' => $status, 'delay' => $delay]];
+        }
+
+        public function delivered(string $paymentId, string $operationId, ?int $status): void
+        {
+            $this->events[] = ['delivered', [
+                'payment_id' => $paymentId,
+                'operation_id' => $operationId,
+                'status' => $status,
+            ]];
+        }
+    };
 }

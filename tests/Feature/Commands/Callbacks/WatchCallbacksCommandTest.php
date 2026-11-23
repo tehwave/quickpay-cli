@@ -2,10 +2,11 @@
 
 use App\Callbacks\Delivery\CallbackDelivery;
 use App\Callbacks\Delivery\CallbackDeliveryFailure;
-use App\Callbacks\Delivery\CallbackTarget;
 use App\Callbacks\Watching\CallbackDeliveryException;
 use App\Callbacks\Watching\CallbackWatcher;
 use App\Callbacks\Watching\CallbackWatcherFactory;
+use App\Callbacks\Watching\CallbackWatchObserver;
+use App\Callbacks\Watching\CallbackWatchRequest;
 use App\Commands\Callbacks\WatchCallbacksCommand;
 use App\Commands\Payments\CancelPaymentCommand;
 use App\Commands\Payments\CapturePaymentCommand;
@@ -70,24 +71,16 @@ it('accepts an account-wide watch without a payment selector', function () {
         {
             return new class implements CallbackWatcher
             {
-                public function run(
-                    ?string $paymentId,
-                    ?string $orderId,
-                    CallbackTarget $target,
-                    string $apiKey,
-                    string $privateKey,
-                    int $interval,
-                    int $deliveryAttempts,
-                    Closure $observer,
-                ): void {
-                    expect($paymentId)->toBeNull()
-                        ->and($orderId)->toBeNull()
-                        ->and($target->url)->toBe('http://localhost/callback')
-                        ->and($deliveryAttempts)->toBe(5);
+                public function run(CallbackWatchRequest $request, CallbackWatchObserver $observer): void
+                {
+                    expect($request->paymentId)->toBeNull()
+                        ->and($request->orderId)->toBeNull()
+                        ->and($request->target->url)->toBe('http://localhost/callback')
+                        ->and($request->deliveryAttempts)->toBe(5);
 
-                    $observer('watching-all', ['ready_at' => '2026-08-07T10:00:01+00:00']);
-                    $observer('delivered', ['payment_id' => '42', 'operation_id' => '1', 'status' => 204]);
-                    $observer('delivered', ['payment_id' => '43', 'operation_id' => '1', 'status' => 204]);
+                    $observer->watchingAllPayments(new DateTimeImmutable('2026-08-07T10:00:01+00:00'));
+                    $observer->delivered('42', '1', 204);
+                    $observer->delivered('43', '1', 204);
                 }
             };
         }
@@ -157,38 +150,30 @@ it('wires a foreground watch session and renders safe progress for every event',
         {
             return new class implements CallbackWatcher
             {
-                public function run(
-                    ?string $paymentId,
-                    ?string $orderId,
-                    CallbackTarget $target,
-                    string $apiKey,
-                    string $privateKey,
-                    int $interval,
-                    int $deliveryAttempts,
-                    Closure $observer,
-                ): void {
-                    expect($paymentId)->toBe('42')
-                        ->and($orderId)->toBeNull()
-                        ->and($target->url)->toBe('http://localhost/callback')
-                        ->and($apiKey)->toBe('watch-api-key')
-                        ->and($privateKey)->toBe('watch-private-key')
-                        ->and($interval)->toBe(2)
-                        ->and($deliveryAttempts)->toBe(7);
+                public function run(CallbackWatchRequest $request, CallbackWatchObserver $observer): void
+                {
+                    expect($request->paymentId)->toBe('42')
+                        ->and($request->orderId)->toBeNull()
+                        ->and($request->target->url)->toBe('http://localhost/callback')
+                        ->and($request->apiKey)->toBe('watch-api-key')
+                        ->and($request->privateKey)->toBe('watch-private-key')
+                        ->and($request->interval)->toBe(2)
+                        ->and($request->deliveryAttempts)->toBe(7);
 
-                    $observer('waiting-for-payment', ['order_id' => 'order-42']);
-                    $observer('watching', ['payment_id' => '42', 'baseline_operations' => 1]);
-                    $observer('payment-found', ['payment_id' => '42', 'order_id' => 'order-42']);
-                    $observer('multiple-operations', ['count' => 2]);
-                    $observer('delivery-retry', [
-                        'attempt' => 1,
-                        'maximum_attempts' => 7,
-                        'delay' => 2,
-                        'payment_id' => '42',
-                        'operation_id' => '7',
-                        'status' => 500,
-                    ]);
-                    $observer('polling-retry', ['status' => 429, 'delay' => 3]);
-                    $observer('delivered', ['operation_id' => '7', 'status' => 204]);
+                    $observer->waitingForPayment('order-42');
+                    $observer->watchingPayment('42', 1);
+                    $observer->paymentFound('42', 'order-42');
+                    $observer->multipleOperations(2);
+                    $observer->deliveryRetrying(
+                        paymentId: '42',
+                        operationId: '7',
+                        attempt: 1,
+                        maximumAttempts: 7,
+                        delay: 2,
+                        status: 500,
+                    );
+                    $observer->pollingRetrying(429, 3);
+                    $observer->delivered('42', '7', 204);
                 }
             };
         }
@@ -216,7 +201,7 @@ it('wires a foreground watch session and renders safe progress for every event',
         ->toContain('HTTP 500')
         ->toContain('retrying in 2 second(s) before later operations')
         ->toContain('retrying in 3 second(s)')
-        ->toContain('Delivered callback for operation 7');
+        ->toContain('Delivered callback for payment 42 operation 7');
     Http::assertNothingSent();
 });
 
@@ -231,17 +216,9 @@ it('accepts delivery attempt validation boundaries and passes the chosen value t
             {
                 public function __construct(private readonly int $expectedAttempts) {}
 
-                public function run(
-                    ?string $paymentId,
-                    ?string $orderId,
-                    CallbackTarget $target,
-                    string $apiKey,
-                    string $privateKey,
-                    int $interval,
-                    int $deliveryAttempts,
-                    Closure $observer,
-                ): void {
-                    expect($deliveryAttempts)->toBe($this->expectedAttempts);
+                public function run(CallbackWatchRequest $request, CallbackWatchObserver $observer): void
+                {
+                    expect($request->deliveryAttempts)->toBe($this->expectedAttempts);
                 }
             };
         }
@@ -282,27 +259,19 @@ it('routes terminal and exhausted delivery failures to redacted stderr with repl
                     private readonly int $attempt,
                 ) {}
 
-                public function run(
-                    ?string $paymentId,
-                    ?string $orderId,
-                    CallbackTarget $target,
-                    string $apiKey,
-                    string $privateKey,
-                    int $interval,
-                    int $deliveryAttempts,
-                    Closure $observer,
-                ): void {
+                public function run(CallbackWatchRequest $request, CallbackWatchObserver $observer): void
+                {
                     throw new CallbackDeliveryException(
                         paymentId: '42',
                         operationId: 'watch-api-key-operation',
                         delivery: new CallbackDelivery(
-                            url: $target->url,
+                            url: $request->target->url,
                             status: $this->status,
                             successful: false,
                             failure: $this->failure,
                         ),
                         attempt: $this->attempt,
-                        maximumAttempts: $deliveryAttempts,
+                        maximumAttempts: $request->deliveryAttempts,
                     );
                 }
             };

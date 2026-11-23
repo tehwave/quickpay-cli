@@ -7,6 +7,7 @@ use App\Callbacks\Resolution\PrivateKeyResolver;
 use App\Callbacks\WatchCallbacks;
 use App\Console\AuthenticatedCommand;
 use App\Console\Input\IntegerInput;
+use App\Console\Output\CallbackWatchProgress;
 use App\Console\Output\ResponseBodySanitizer;
 use App\Quickpay\AuthenticatedQuickpay;
 use App\Quickpay\AuthenticatedQuickpayFactory;
@@ -75,9 +76,7 @@ class WatchCallbacksCommand extends AuthenticatedCommand
                     $request,
                     $interval,
                     $deliveryAttempts,
-                    function (string $event, array $context) use ($apiKey, $request): void {
-                        $this->writeWatchEvent($event, $context, $apiKey, $request->target->url);
-                    },
+                    new CallbackWatchProgress($this, $apiKey, $request->target->url),
                 );
 
                 return self::SUCCESS;
@@ -113,38 +112,5 @@ class WatchCallbacksCommand extends AuthenticatedCommand
         }
 
         return $interval;
-    }
-
-    /** @param array<string, int|string|null> $context */
-    private function writeWatchEvent(string $event, array $context, string $apiKey, string $destination): int
-    {
-        $value = fn (string $key): string => ResponseBodySanitizer::terminalLine((string) ($context[$key] ?? '-'), $apiKey);
-        $safeDestination = ResponseBodySanitizer::terminalLine($destination, $apiKey);
-        $operation = isset($context['payment_id'])
-            ? "payment {$value('payment_id')} operation {$value('operation_id')}"
-            : "operation {$value('operation_id')}";
-        $deliveryStatus = ($context['status'] ?? null) === null
-            ? 'no HTTP response'
-            : "HTTP {$value('status')}";
-
-        if ($event === 'watching-all') {
-            $this->info('Watching all Quickpay payment callbacks. Press Ctrl-C to stop.');
-            $this->line("Ready at {$value('ready_at')}; forwarding to {$safeDestination}.");
-
-            return self::SUCCESS;
-        }
-
-        match ($event) {
-            'waiting-for-payment' => $this->line("Waiting for order {$value('order_id')} to create a payment."),
-            'watching' => $this->line("Payment {$value('payment_id')} ready; {$value('baseline_operations')} existing operation(s) baselined."),
-            'payment-found' => $this->line("Order {$value('order_id')} created payment {$value('payment_id')}."),
-            'multiple-operations' => $this->warn("Detected {$value('count')} operations in one poll; forwarding one callback per operation with the same latest payment snapshot."),
-            'delivery-retry' => $this->warn("Callback for {$operation} failed on attempt {$value('attempt')} of {$value('maximum_attempts')} ({$deliveryStatus}); retrying in {$value('delay')} second(s) before later operations."),
-            'polling-retry' => $this->warn("Quickpay polling failed (HTTP {$value('status')}); retrying in {$value('delay')} second(s)."),
-            'delivered' => $this->info("Delivered callback for {$operation} with HTTP {$value('status')}."),
-            default => null,
-        };
-
-        return self::SUCCESS;
     }
 }
