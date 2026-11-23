@@ -206,3 +206,68 @@ it('keeps scoped and account-wide watchers pinned after selection and removal', 
         expect($request->header('Authorization'))->toBe(['Basic '.base64_encode(':fake-secret-b')]);
     }
 })->with(['scoped' => true, 'account-wide' => false]);
+
+it('blocks writes for a read-only merchant before any request or confirmation', function (string $class, array $arguments, string $method): void {
+    $this->store->add('shop-r', 'fake-secret-r', write: false);
+    Http::fake();
+    $command = new $class;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+    $exit = $tester->execute([...$arguments, '--merchant' => 'shop-r'], ['capture_stderr_separately' => true]);
+    expect($exit)->toBe(1)
+        ->and(preg_replace('/\s+/', ' ', $tester->getErrorOutput()))->toContain("does not allow write requests, so the {$method} request was not sent")
+        ->and($tester->getDisplay().$tester->getErrorOutput())->not->toContain('Continue?')->not->toContain('fake-secret-r');
+    Http::assertNothingSent();
+})->with([
+    'capture' => [CapturePaymentCommand::class, ['id' => '42', 'amount' => '1250'], 'POST'],
+    'refund' => [RefundPaymentCommand::class, ['id' => '42', 'amount' => '1250'], 'POST'],
+    'cancel' => [CancelPaymentCommand::class, ['id' => '42'], 'POST'],
+    'create' => [CreatePaymentCommand::class, ['order-id' => 'order-42'], 'POST'],
+    'link' => [CreatePaymentLinkCommand::class, ['id' => '42', 'amount' => '1000'], 'PUT'],
+    'raw POST' => [ApiRequestCommand::class, ['method' => 'POST', 'path' => '/payments/42/capture'], 'POST'],
+    'raw PUT' => [ApiRequestCommand::class, ['method' => 'put', 'path' => '/payments/42/link'], 'PUT'],
+    'raw PATCH' => [ApiRequestCommand::class, ['method' => 'PATCH', 'path' => '/payments/42'], 'PATCH'],
+    'raw DELETE' => [ApiRequestCommand::class, ['method' => 'DELETE', 'path' => '/payments/42/link'], 'DELETE'],
+]);
+
+it('still reads through a read-only merchant', function (string $command, array $arguments, string $path, mixed $body): void {
+    $this->store->add('shop-r', 'fake-secret-r', write: false);
+    Http::fake([
+        'https://api.quickpay.net'.$path.'*' => Http::response($body),
+        'http://localhost/callback' => Http::response('', 204),
+    ]);
+    $this->artisan($command, [...$arguments, '--merchant' => 'shop-r', '--json' => true])->assertExitCode(0);
+    Http::assertSent(fn (Request $request): bool => str_starts_with($request->url(), 'https://api.quickpay.net'.$path)
+        && $request->method() === 'GET');
+    Http::assertNotSent(fn (Request $request): bool => str_starts_with($request->url(), 'https://api.quickpay.net') && $request->method() !== 'GET');
+})->with([
+    'get' => ['payments:get', ['id' => '42'], '/payments/42', ['id' => 42]],
+    'list' => ['payments:list', [], '/payments', [['id' => 42]]],
+    'raw GET' => ['api', ['method' => 'GET', 'path' => '/payments/42'], '/payments/42', ['id' => 42]],
+    'replay to a local handler' => ['callbacks:replay', ['payment-id' => '42', '--to' => 'http://localhost/callback'], '/payments/42', ['id' => 42, 'merchant_id' => 123, 'order_id' => 'order-42', 'operations' => []]],
+]);
+
+it('blocks reads for a write-only merchant without retrying', function (string $command, array $arguments): void {
+    $this->store->add('shop-w', 'fake-secret-w', read: false);
+    Http::fake();
+    $this->artisan($command, [...$arguments, '--merchant' => 'shop-w'])
+        ->expectsOutputToContain('does not allow read requests')->assertExitCode(1);
+    Http::assertNothingSent();
+})->with([
+    'get' => ['payments:get', ['id' => '42']],
+    'list' => ['payments:list', []],
+    'raw GET' => ['api', ['method' => 'GET', 'path' => '/payments/42']],
+    'capture inspects the payment first' => ['payments:capture', ['id' => '42', 'amount' => '1250', '--yes' => true]],
+    'replay' => ['callbacks:replay', ['payment-id' => '42', '--to' => 'http://localhost/callback']],
+    'scoped watch' => ['callbacks:watch', ['payment-id' => '42', '--to' => 'http://localhost/callback']],
+    'account-wide watch' => ['callbacks:watch', ['--to' => 'http://localhost/callback']],
+]);
+
+it('still writes through a write-only merchant', function (): void {
+    $this->store->add('shop-w', 'fake-secret-w', read: false);
+    Http::fake(['https://api.quickpay.net/payments' => Http::response('{"id":42}')]);
+    $this->artisan('payments:create', ['order-id' => 'order-42', '--merchant' => 'shop-w', '--json' => true])->assertExitCode(0);
+    Http::assertSentCount(1);
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
+        && $request->header('Authorization') === ['Basic '.base64_encode(':fake-secret-w')]);
+});

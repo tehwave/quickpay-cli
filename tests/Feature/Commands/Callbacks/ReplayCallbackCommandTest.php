@@ -4,6 +4,7 @@ use App\Callbacks\Resolution\AccountPrivateKeyFetcher;
 use App\Callbacks\Resolution\PrivateKeyResolver;
 use App\Commands\Callbacks\ReplayCallbackCommand;
 use App\Credentials\EnvironmentVariables;
+use App\Credentials\MerchantAccess;
 use App\Credentials\ProjectMerchantFile;
 use App\Quickpay\QuickpayClient;
 use Illuminate\Http\Client\Factory;
@@ -33,7 +34,7 @@ afterEach(function () {
 
 it('resolves an environment private key through the stateless provider without contacting Quickpay', function () {
     Http::fake();
-    $quickpay = new QuickpayClient(app(Factory::class), 'api-key');
+    $quickpay = new QuickpayClient(app(Factory::class), 'api-key', MerchantAccess::full());
     $resolver = new PrivateKeyResolver(new AccountPrivateKeyFetcher, new EnvironmentVariables);
 
     expect($resolver->resolve($quickpay))->toBe('replay-private-key');

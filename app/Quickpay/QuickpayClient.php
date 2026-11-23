@@ -2,6 +2,8 @@
 
 namespace App\Quickpay;
 
+use App\Credentials\Exceptions\MerchantAccessException;
+use App\Credentials\MerchantAccess;
 use App\Quickpay\Exceptions\QuickpayRequestException;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\HttpClientException;
@@ -12,8 +14,9 @@ use InvalidArgumentException;
  * Owns every HTTP invariant required by the Quickpay API boundary.
  *
  * Callers provide relative paths and business payloads only. Authentication,
- * origin, API version, JSON headers, and timeout remain centralized so raw API
- * access cannot weaken the same guarantees used by first-class commands.
+ * origin, API version, JSON headers, timeout, and the merchant's read and write
+ * access remain centralized so raw API access cannot weaken the same guarantees
+ * used by first-class commands.
  */
 final readonly class QuickpayClient
 {
@@ -24,7 +27,34 @@ final readonly class QuickpayClient
     public function __construct(
         private Factory $http,
         private string $apiKey,
+        private MerchantAccess $access,
     ) {}
+
+    /**
+     * Fails before any request the merchant's access flags do not allow.
+     *
+     * Commands that inspect or confirm before mutating call this first, so a
+     * blocked mutation never fetches state or asks for confirmation.
+     *
+     * @throws MerchantAccessException
+     */
+    public function authorize(string $method): void
+    {
+        if (! $this->access->allows($method)) {
+            throw MerchantAccessException::blocked($method);
+        }
+    }
+
+    /**
+     * Verifies the credential itself.
+     *
+     * It is exempt from the access flags because it reads no merchant data, so
+     * a merchant that blocks reads can still be checked.
+     */
+    public function ping(): QuickpayResponse
+    {
+        return $this->send('GET', '/ping');
+    }
 
     /**
      * @param  array<array-key, mixed>  $query
@@ -63,6 +93,8 @@ final readonly class QuickpayClient
      */
     private function request(string $method, string $path, array $query = [], array $data = [], array $headers = []): QuickpayResponse
     {
+        $this->authorize($method);
+
         if (parse_url($path, PHP_URL_SCHEME) !== null || str_starts_with($path, '//')) {
             throw new InvalidArgumentException('Quickpay request paths must be relative.');
         }
@@ -84,6 +116,8 @@ final readonly class QuickpayClient
         array $headers = [],
         bool $hasData = false,
     ): QuickpayResponse {
+        $this->authorize($method);
+
         if (parse_url($path, PHP_URL_SCHEME) !== null || str_starts_with($path, '//')) {
             throw new InvalidArgumentException('Quickpay request paths must be relative.');
         }

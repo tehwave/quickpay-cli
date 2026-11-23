@@ -58,6 +58,25 @@ For scripts and CI, you can supply the API key through `QUICKPAY_API_KEY`
 instead of saving a merchant. Use it outside folders with a project merchant
 selected, and leave out `--merchant`.
 
+### Read-only merchants
+
+Keep a merchant safe from changes by blocking its write requests. It can still
+list and inspect payments, but it can't create, capture, refund or cancel them,
+or send a raw `POST`, `PUT`, `PATCH` or `DELETE`:
+
+```bash
+quickpay merchants:add "My Website" --no-write
+quickpay merchants:access "My Website" --no-write
+quickpay merchants:access "My Website" --write
+```
+
+`--no-read` blocks `GET` requests the same way. A blocked request stops before
+anything reaches Quickpay. Allowing requests again asks you to confirm in an
+interactive terminal, so a script or agent can't lift a block on its own.
+Capture, refund and cancel need both reads and writes, because they show you the
+payment before asking to continue. A key in `QUICKPAY_API_KEY` always has full
+access.
+
 ## Payments
 
 ```bash

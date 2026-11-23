@@ -27,6 +27,10 @@ abstract class AbstractPaymentMutationCommand extends AuthenticatedCommand
         PaymentPresenter $presenter,
     ): int {
         return $this->withQuickpay($quickpay, function (AuthenticatedQuickpay $authenticated) use ($confirmation, $presenter): int {
+            // Capture, refund, and cancel are POST requests. Checking access
+            // first keeps a read-only merchant from inspecting and prompting
+            // for a mutation it can never send.
+            $authenticated->client->authorize('POST');
             $apiKey = $authenticated->apiKey->value();
             $id = IntegerInput::positive($this->argument('id'), 'id');
             $body = $this->mutationBody();

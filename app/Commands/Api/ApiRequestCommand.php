@@ -46,6 +46,7 @@ class ApiRequestCommand extends AuthenticatedCommand
                 $this->option('data-json'),
                 (array) $this->option('header'),
             );
+            $authenticated->client->authorize($request->method);
 
             if ($request->mutation) {
                 $this->writeMerchantContext($authenticated);

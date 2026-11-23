@@ -103,3 +103,26 @@ it('handles network failure without leaking or storing credentials', function ()
         ->expectsOutputToContain('Unable to connect to Quickpay')->doesntExpectOutputToContain('fake-secret-a')->assertExitCode(1);
     expect(file_exists($this->store->path()))->toBeFalse();
 });
+
+it('saves access flags given when adding a merchant', function (array $flags, array $saved, ?string $label): void {
+    Http::fake(['https://api.quickpay.net/ping' => Http::response(['scope' => 'merchant'])]);
+    $command = $this->artisan('merchants:add', ['name' => 'shop-a', ...$flags])
+        ->expectsQuestion('API key', 'fake-secret-a');
+    $label === null ? $command->doesntExpectOutputToContain('Access:') : $command->expectsOutputToContain('Access: '.$label);
+    $command->assertExitCode(0)->run();
+    expect($this->store->read()['merchants']['shop-a'])->toBe(['api_key' => 'fake-secret-a', ...$saved]);
+    Http::assertSentCount(1);
+})->with([
+    'default' => [[], ['read' => true, 'write' => true], null],
+    'read-only' => [['--no-write' => true], ['read' => true, 'write' => false], 'read-only'],
+    'write-only' => [['--no-read' => true], ['read' => false, 'write' => true], 'write-only'],
+    'none' => [['--no-read' => true, '--no-write' => true], ['read' => false, 'write' => false], 'no API access'],
+]);
+
+it('keeps access flags when replacing a credential', function (): void {
+    Http::fake(['https://api.quickpay.net/ping' => Http::response(['scope' => 'merchant'])]);
+    $this->store->add('shop-a', 'fake-original', write: false);
+    $this->artisan('merchants:add', ['name' => 'shop-a', '--replace' => true])
+        ->expectsQuestion('API key', 'fake-replacement')->expectsOutputToContain('Access: read-only')->assertExitCode(0);
+    expect($this->store->read()['merchants']['shop-a'])->toBe(['api_key' => 'fake-replacement', 'read' => true, 'write' => false]);
+});

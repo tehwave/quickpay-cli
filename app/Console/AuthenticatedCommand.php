@@ -4,6 +4,7 @@ namespace App\Console;
 
 use App\Console\Output\ResponseBodySanitizer;
 use App\Credentials\Exceptions\CredentialException;
+use App\Credentials\Exceptions\MerchantAccessException;
 use App\Quickpay\AuthenticatedQuickpay;
 use App\Quickpay\AuthenticatedQuickpayFactory;
 use App\Quickpay\Exceptions\QuickpayRequestException;
@@ -41,7 +42,7 @@ abstract class AuthenticatedCommand extends BaseCommand
 
         try {
             return $callback($authenticated);
-        } catch (InvalidArgumentException|QuickpayRequestException|UnexpectedValueException $exception) {
+        } catch (InvalidArgumentException|MerchantAccessException|QuickpayRequestException|UnexpectedValueException $exception) {
             return $this->failure($authenticated->safeLine($exception->getMessage()));
         }
     }

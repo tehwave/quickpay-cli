@@ -1,5 +1,6 @@
 <?php
 
+use App\Credentials\MerchantAccess;
 use App\Quickpay\Payments\PaymentApi;
 use App\Quickpay\Payments\PaymentMutation;
 use App\Quickpay\Payments\PaymentPaginator;
@@ -18,7 +19,7 @@ it('paginates through validated relative next targets', function (): void {
         'https://api.quickpay.net/payments?page=2&page_size=1' => Http::response([['id' => 2]]),
     ]);
 
-    $api = new PaymentApi(new QuickpayClient(app(Factory::class), 'api-key'));
+    $api = new PaymentApi(new QuickpayClient(app(Factory::class), 'api-key', MerchantAccess::full()));
 
     expect((new PaymentPaginator($api))->all(['page_size' => 1], 2))
         ->toBe([['id' => 1], ['id' => 2]]);
@@ -27,7 +28,7 @@ it('paginates through validated relative next targets', function (): void {
 
 it('fetches context before confirmation and never mutates when declined', function (): void {
     Http::fake(['https://api.quickpay.net/payments/42' => Http::response(['id' => 42])]);
-    $api = new PaymentApi(new QuickpayClient(app(Factory::class), 'api-key'));
+    $api = new PaymentApi(new QuickpayClient(app(Factory::class), 'api-key', MerchantAccess::full()));
 
     $result = (new PaymentMutation($api))->execute(
         id: 42,
@@ -48,7 +49,7 @@ it('mutates exactly once after context is approved', function (): void {
         'https://api.quickpay.net/payments/42' => Http::response(['id' => 42]),
         'https://api.quickpay.net/payments/42/capture' => Http::response(['id' => 42, 'state' => 'processed']),
     ]);
-    $api = new PaymentApi(new QuickpayClient(app(Factory::class), 'api-key'));
+    $api = new PaymentApi(new QuickpayClient(app(Factory::class), 'api-key', MerchantAccess::full()));
 
     $result = (new PaymentMutation($api))->execute(
         id: 42,

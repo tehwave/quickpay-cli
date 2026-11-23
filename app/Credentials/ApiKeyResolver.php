@@ -29,7 +29,7 @@ final readonly class ApiKeyResolver
         }
 
         if ($environmentKey !== null) {
-            return new ApiKey($environmentKey, 'environment', null, 'environment');
+            return new ApiKey($environmentKey, 'environment', MerchantAccess::full(), null, 'environment');
         }
 
         $config = $this->store->read();
@@ -51,6 +51,8 @@ final readonly class ApiKeyResolver
             });
         }
 
-        return new ApiKey($config['merchants'][$name]['api_key'], 'config file', $name, $source);
+        $saved = $config['merchants'][$name];
+
+        return new ApiKey($saved['api_key'], 'config file', new MerchantAccess($saved['read'], $saved['write']), $name, $source);
     }
 }

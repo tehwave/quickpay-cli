@@ -18,10 +18,10 @@ it('reports configuration without claiming unverified authentication', function 
     [$exit, $output, $errors] = merchantCommandResult(ActiveMerchantCommand::class, ['--json' => true]);
     expect($exit)->toBe(0)->and($errors)->toBe('')->and(json_decode($output, true, flags: JSON_THROW_ON_ERROR))->toBe([
         'merchant' => 'shop-a', 'selection_source' => 'default', 'credential_source' => 'config file',
-        'configured' => true, 'checked' => false, 'authenticated' => null,
+        'configured' => true, 'read' => true, 'write' => true, 'checked' => false, 'authenticated' => null,
         'api_base_url' => 'https://api.quickpay.net', 'api_version' => 'v10', 'scope' => null,
     ]);
-    $this->artisan('merchants:active')->expectsOutputToContain('shop-a')->expectsOutputToContain('not checked')->assertExitCode(0);
+    $this->artisan('merchants:active')->expectsOutputToContain('shop-a')->expectsOutputToContain('not checked')->doesntExpectOutputToContain('Access:')->assertExitCode(0);
     Http::assertNothingSent();
 });
 
@@ -49,7 +49,8 @@ it('reports environment-only credentials without inferring a merchant label', fu
     [$exit, $output] = merchantCommandResult(ActiveMerchantCommand::class, ['--json' => true]);
     $data = json_decode($output, true);
     expect($exit)->toBe(0)->and($data['merchant'])->toBeNull()->and($data['selection_source'])->toBe('environment')
-        ->and($data['credential_source'])->toBe('environment')->and($data['authenticated'])->toBeNull();
+        ->and($data['credential_source'])->toBe('environment')->and($data['authenticated'])->toBeNull()
+        ->and($data['read'])->toBeTrue()->and($data['write'])->toBeTrue();
     Http::assertNothingSent();
 });
 
@@ -81,7 +82,7 @@ it('rejects ambiguous configuration before checking API access', function (bool 
     $path = $project ? getcwd().'/.quickpay-cli.json' : $this->store->path();
     $contents = $project
         ? '{"merchant":"shop-a","merch\\u0061nt":"shop-b"}'
-        : '{"default_merchant":"shop-a","merchants":{"shop-a":{"api_key":"fake-first"},"sh\\u006fp-a":{"api_key":"fake-last"}}}';
+        : '{"default_merchant":"shop-a","merchants":{"shop-a":{"api_key":"fake-first","read":true,"write":true},"sh\\u006fp-a":{"api_key":"fake-last","read":true,"write":true}}}';
     file_put_contents($path, $contents);
     Http::fake(['*' => Http::response(['scope' => 'merchant'])]);
     [$exit, $output, $errors] = merchantCommandResult(ActiveMerchantCommand::class, ['--check' => true, '--json' => true]);
@@ -89,3 +90,20 @@ it('rejects ambiguous configuration before checking API access', function (bool 
         ->and(file_get_contents($path))->toBe($contents);
     Http::assertNothingSent();
 })->with(['store' => false, 'project' => true]);
+
+it('reports restricted access and still verifies a merchant that blocks reads', function (): void {
+    Http::fake(['https://api.quickpay.net/ping' => Http::response(['scope' => 'merchant'])]);
+    $this->store->add('shop-a', 'fake-secret-a', read: false);
+    [$exit, $output, $errors] = merchantCommandResult(ActiveMerchantCommand::class, ['--check' => true, '--json' => true]);
+    $data = json_decode($output, true, flags: JSON_THROW_ON_ERROR);
+    expect($exit)->toBe(0)->and($errors)->toBe('')->and($data['read'])->toBeFalse()->and($data['write'])->toBeTrue()
+        ->and($data['authenticated'])->toBeTrue();
+    $this->artisan('merchants:active')->expectsOutputToContain('Access: write-only')->assertExitCode(0);
+    Http::assertSentCount(1);
+});
+
+it('reports no access flags when no credential is configured', function (): void {
+    [$exit, $output] = merchantCommandResult(ActiveMerchantCommand::class, ['--json' => true]);
+    $data = json_decode($output, true, flags: JSON_THROW_ON_ERROR);
+    expect($exit)->toBe(0)->and($data['read'])->toBeNull()->and($data['write'])->toBeNull();
+});

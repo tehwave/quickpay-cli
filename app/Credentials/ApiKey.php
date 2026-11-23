@@ -10,6 +10,7 @@ final readonly class ApiKey
     public function __construct(
         private string $value,
         private string $source,
+        private MerchantAccess $access,
         private ?string $merchant = null,
         private ?string $selectionSource = null,
     ) {
@@ -26,6 +27,11 @@ final readonly class ApiKey
     public function source(): string
     {
         return $this->source;
+    }
+
+    public function access(): MerchantAccess
+    {
+        return $this->access;
     }
 
     public function merchant(): ?string

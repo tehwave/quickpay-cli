@@ -23,7 +23,7 @@ final readonly class AuthenticatedQuickpayFactory
 
     public function from(ApiKey $apiKey): AuthenticatedQuickpay
     {
-        $client = new QuickpayClient($this->http, $apiKey->value());
+        $client = new QuickpayClient($this->http, $apiKey->value(), $apiKey->access());
 
         return new AuthenticatedQuickpay(
             $client,

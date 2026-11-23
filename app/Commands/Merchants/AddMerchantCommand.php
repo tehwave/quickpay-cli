@@ -7,10 +7,12 @@ use App\Console\Output\ResponseBodySanitizer;
 use App\Console\Terminal\StdinTerminalDetector;
 use App\Credentials\ApiKey;
 use App\Credentials\Exceptions\CredentialException;
+use App\Credentials\MerchantAccess;
 use App\Credentials\MerchantName;
 use App\Credentials\MerchantStore;
 use App\Quickpay\Exceptions\QuickpayRequestException;
 use App\Quickpay\MerchantAuthenticationCheck;
+use Symfony\Component\Console\Input\InputOption;
 use UnexpectedValueException;
 
 class AddMerchantCommand extends BaseCommand
@@ -20,6 +22,13 @@ class AddMerchantCommand extends BaseCommand
         {--replace : Replace this saved merchant credential after validation}';
 
     protected $description = 'Validate and save API access to an existing Quickpay merchant';
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->addOption('read', null, InputOption::VALUE_NEGATABLE, 'Allow read requests (GET). Allowed by default; --replace keeps the saved setting');
+        $this->addOption('write', null, InputOption::VALUE_NEGATABLE, 'Allow write requests (POST, PUT, PATCH, DELETE). Allowed by default; --replace keeps the saved setting');
+    }
 
     public function handle(MerchantStore $store, MerchantAuthenticationCheck $check, StdinTerminalDetector $terminal): int
     {
@@ -49,14 +58,19 @@ class AddMerchantCommand extends BaseCommand
                 return $this->failure('API key cannot be empty.');
             }
 
-            $credential = new ApiKey($apiKey, 'provided');
+            $credential = new ApiKey($apiKey, 'provided', MerchantAccess::full());
             if ($credential->appearsIn($name)) {
                 return $this->failure('Merchant name must not contain the API key.');
             }
 
             $check->check($credential);
-            $store->add($name, $apiKey, (bool) $this->option('replace'));
+            $read = $this->option('read');
+            $write = $this->option('write');
+            $access = $store->add($name, $apiKey, (bool) $this->option('replace'), is_bool($read) ? $read : null, is_bool($write) ? $write : null);
             $this->info('Merchant saved: '.$name);
+            if (! $access->isFull()) {
+                $this->line('Access: '.$access->label());
+            }
 
             $legacy = $store->leftoverLegacyCredential();
             if ($legacy !== null) {

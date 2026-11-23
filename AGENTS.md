@@ -81,6 +81,10 @@ validation, and the locked-dependency audit.
   global default. Invalid or stale selection never falls back silently.
 - A non-empty `QUICKPAY_API_KEY` bypasses saved storage when no explicit or
   project selection exists; combining them fails before API requests.
+- Saved merchants carry `read` and `write` flags that `QuickpayClient` enforces
+  before sending: `GET` is a read, every other method a write. Commands that
+  inspect or confirm before mutating check them first. Allowing requests needs
+  an interactive terminal; `QUICKPAY_API_KEY` has full access.
 - Resolve credentials once per command, including long-running watchers. Plain
   `merchants:active` is local status; `--check` verifies merchant API access.
 - The client owns the Quickpay host, authentication, API version, and JSON

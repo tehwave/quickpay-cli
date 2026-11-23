@@ -21,6 +21,7 @@ it('presents only product commands in the public command list', function () {
         'api',
         'callbacks:replay',
         'callbacks:watch',
+        'merchants:access',
         'merchants:active',
         'merchants:add',
         'merchants:list',

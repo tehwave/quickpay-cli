@@ -8,7 +8,7 @@ it('lists only sorted names and the global default', function (): void {
     $this->store->add('My Other Website', 'fake-secret-a');
     [$exit, $output, $errors] = merchantCommandResult(ListMerchantsCommand::class, ['--json' => true]);
     expect($exit)->toBe(0)->and($errors)->toBe('')->and(json_decode($output, true, flags: JSON_THROW_ON_ERROR))
-        ->toBe([['name' => 'My Other Website', 'default' => false], ['name' => 'My Website', 'default' => true]]);
+        ->toBe([['name' => 'My Other Website', 'default' => false, 'read' => true, 'write' => true], ['name' => 'My Website', 'default' => true, 'read' => true, 'write' => true]]);
     Http::assertNothingSent();
 });
 
@@ -19,9 +19,25 @@ it('lists an empty store without contacting Quickpay', function (): void {
 });
 
 it('never lists labels that expose another saved API key', function (): void {
-    file_put_contents($this->store->path(), '{"default_merchant":"shop-a","merchants":{"shop-a":{"api_key":"fake-secret-a"},"fake-secret-a":{"api_key":"fake-secret-b"}}}');
+    file_put_contents($this->store->path(), '{"default_merchant":"shop-a","merchants":{"shop-a":{"api_key":"fake-secret-a","read":true,"write":true},"fake-secret-a":{"api_key":"fake-secret-b","read":true,"write":true}}}');
     [$exit, $output, $errors] = merchantCommandResult(ListMerchantsCommand::class, ['--json' => true]);
     expect($exit)->toBe(1)->and($output)->toBe('')
         ->and($errors)->not->toContain('fake-secret-a', 'fake-secret-b');
+    Http::assertNothingSent();
+});
+
+it('shows access only for merchants that block requests', function (): void {
+    $this->store->add('shop-a', 'fake-secret-a');
+    $this->store->add('shop-b', 'fake-secret-b', write: false);
+    $this->store->add('shop-c', 'fake-secret-c', read: false);
+    [$exit, $output] = merchantCommandResult(ListMerchantsCommand::class, ['--json' => true]);
+    expect($exit)->toBe(0)->and(json_decode($output, true, flags: JSON_THROW_ON_ERROR))->toBe([
+        ['name' => 'shop-a', 'default' => true, 'read' => true, 'write' => true],
+        ['name' => 'shop-b', 'default' => false, 'read' => true, 'write' => false],
+        ['name' => 'shop-c', 'default' => false, 'read' => false, 'write' => true],
+    ]);
+    [$exit, $output] = merchantCommandResult(ListMerchantsCommand::class);
+    expect($exit)->toBe(0)->and($output)->toContain('Access')->toContain('read-only')->toContain('write-only')
+        ->not->toContain('read and write');
     Http::assertNothingSent();
 });
