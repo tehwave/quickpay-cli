@@ -2,9 +2,6 @@
 
 namespace App\Callbacks\Watching;
 
-use App\Callbacks\Delivery\CallbackTarget;
-use Closure;
-
 /**
  * Runs one foreground callback watch session.
  *
@@ -13,17 +10,5 @@ use Closure;
  */
 interface CallbackWatcher
 {
-    /**
-     * @param  Closure(string, array<string, int|string|null>): void  $observer
-     */
-    public function run(
-        ?string $paymentId,
-        ?string $orderId,
-        CallbackTarget $target,
-        string $apiKey,
-        string $privateKey,
-        int $interval,
-        int $deliveryAttempts,
-        Closure $observer,
-    ): void;
+    public function run(CallbackWatchRequest $request, CallbackWatchObserver $observer): void;
 }
