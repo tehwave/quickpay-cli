@@ -70,7 +70,7 @@ class AddMerchantCommand extends BaseCommand
             }
 
             if ($environment->get('QUICKPAY_API_KEY') !== null) {
-                $this->comment('QUICKPAY_API_KEY is set, so commands use it instead of saved merchants until you unset it.');
+                $this->comment('QUICKPAY_API_KEY is set, so commands use it instead of your default merchant, and --merchant or a project binding fails. Unset it to use saved merchants.');
             }
 
             $legacy = $store->leftoverLegacyCredential();

@@ -65,7 +65,9 @@ asking for confirmation. Making a merchant read-only works anywhere, and
 confirmation, or by removing the merchant and adding it again without
 `--read-only`, which needs its API key typed into an interactive terminal. A key
 from `QUICKPAY_API_KEY` has full access. The flag is a local guardrail, not a
-Quickpay permission: anyone who can edit the configuration file can change it.
+Quickpay permission or a lock: a program that drives a pseudo-terminal can
+answer the confirmation, and anyone who can edit the configuration file can
+change it.
 
 ## Local callback forwarding
 

@@ -322,3 +322,27 @@ it('keeps persistence errors free of credentials', function (): void {
         expect($exception->getMessage())->not->toContain('fake-sensitive');
     }
 });
+
+it('looks up the home folder only when the configuration is used', function (): void {
+    $saved = ['HOME' => getenv('HOME'), 'USERPROFILE' => getenv('USERPROFILE')];
+    putenv('HOME');
+    putenv('USERPROFILE');
+    try {
+        $store = MerchantStore::inHome(new HomeDirectory(new EnvironmentVariables));
+        expect(fn () => $store->read())->toThrow(CredentialException::class, 'Unable to locate the home directory');
+    } finally {
+        foreach ($saved as $name => $value) {
+            $value === false ? putenv($name) : putenv("{$name}={$value}");
+        }
+    }
+});
+
+it('names the file in configuration errors that point at stored content', function (string $contents, string $message): void {
+    mkdir(dirname($this->path), 0700, true);
+    file_put_contents($this->path, $contents);
+    expect(fn () => (new MerchantStore($this->path))->read())
+        ->toThrow(CredentialException::class, "Quickpay CLI merchant configuration {$this->path} {$message}");
+})->with([
+    'single-key file' => ['{"api_key":"fake-key"}', 'uses the unsupported single-key format'],
+    'invalid merchant name' => ['{"default_merchant":null,"merchants":{" shop":{"api_key":"fake-key","read_only":false}}}', 'contains an invalid merchant name. Merchant names must start with a letter'],
+]);

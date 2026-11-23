@@ -27,7 +27,7 @@ it('says when QUICKPAY_API_KEY still takes precedence over the saved merchant', 
         ->expectsQuestion('API key', 'fake-secret-a')
         ->expectsOutputToContain('Merchant saved: My Website');
     $environment
-        ? $command->expectsOutputToContain('QUICKPAY_API_KEY is set')
+        ? $command->expectsOutputToContain('QUICKPAY_API_KEY is set, so commands use it instead of your default merchant, and --merchant or a project binding fails.')
         : $command->doesntExpectOutputToContain('QUICKPAY_API_KEY');
     $command->doesntExpectOutputToContain('fake-environment')->assertExitCode(0);
 })->with(['environment key' => true, 'no environment key' => false]);

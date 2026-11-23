@@ -9,7 +9,10 @@ use stdClass;
 
 final readonly class ProjectMerchantFile
 {
-    /** @param ?int $owner Expected binding owner; defaults to the effective user where POSIX is available. */
+    /** A binding holds one short merchant name, so anything larger is refused unread. */
+    private const MAX_BYTES = 4096;
+
+    /** @param ?int $owner Expected binding owner; defaults to the current user. */
     public function __construct(
         private ?string $directory = null,
         private ?int $owner = null,
@@ -55,6 +58,32 @@ final readonly class ProjectMerchantFile
         }
     }
 
+    /**
+     * The current user's ID, which every binding must be owned by.
+     *
+     * Without the posix extension, a temporary file this process creates is
+     * owned by the same user, so its owner stands in. If that cannot be read
+     * either, no binding is trusted.
+     */
+    public static function currentUser(): int
+    {
+        return function_exists('posix_geteuid') ? posix_geteuid() : self::temporaryFileOwner();
+    }
+
+    public static function temporaryFileOwner(): int
+    {
+        $file = @tmpfile();
+        $stat = $file === false ? false : @fstat($file);
+        if ($file !== false) {
+            fclose($file);
+        }
+        if ($stat === false) {
+            throw new CredentialException('Unable to check who owns project merchant bindings.');
+        }
+
+        return $stat['uid'];
+    }
+
     private function directory(): string
     {
         $directory = $this->directory ?? getcwd();
@@ -69,18 +98,25 @@ final readonly class ProjectMerchantFile
     private function read(string $path): string
     {
         $location = ResponseBodySanitizer::terminalLine($path, '');
-        $contents = is_file($path) ? @file_get_contents($path) : false;
-        if ($contents === false) {
+        if (! is_file($path)) {
             throw new CredentialException("Project merchant binding {$location} cannot be read.");
         }
         // Upward discovery reaches shared directories such as /tmp. Another
-        // user's binding must not steer which saved merchant this user runs.
-        // fileowner() follows symlinks, so a link another user planted to one
-        // of this user's bindings is checked by its own owner as well.
-        $owner = $this->owner ?? (function_exists('posix_geteuid') ? posix_geteuid() : null);
+        // user's binding must not steer which saved merchant this user runs,
+        // so its owner is checked before anything is read. fileowner() follows
+        // symlinks, so a link another user planted to one of this user's
+        // bindings is checked by its own owner as well.
+        $owner = $this->owner ?? self::currentUser();
         $link = is_link($path) ? @lstat($path) : null;
-        if ($owner !== null && (@fileowner($path) !== $owner || ($link !== null && ($link === false || $link['uid'] !== $owner)))) {
+        if (@fileowner($path) !== $owner || ($link !== null && ($link === false || $link['uid'] !== $owner))) {
             throw new CredentialException("Project merchant binding {$location} is not owned by the current user.");
+        }
+        $contents = @file_get_contents($path, false, null, 0, self::MAX_BYTES + 1);
+        if ($contents === false) {
+            throw new CredentialException("Project merchant binding {$location} cannot be read.");
+        }
+        if (strlen($contents) > self::MAX_BYTES) {
+            throw new CredentialException("Project merchant binding {$location} is too large to hold only a merchant name.");
         }
         try {
             $config = MerchantConfigurationJson::decode($contents);

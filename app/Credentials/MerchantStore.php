@@ -2,6 +2,7 @@
 
 namespace App\Credentials;
 
+use App\Console\Output\ResponseBodySanitizer;
 use App\Credentials\Exceptions\CredentialException;
 use App\Credentials\Redaction\CredentialRedactor;
 use Closure;
@@ -14,21 +15,40 @@ use stdClass;
  */
 final readonly class MerchantStore
 {
-    public function __construct(
-        private string $path,
-        private ?string $legacyPath = null,
-    ) {}
+    /** @var Closure(): string */
+    private Closure $path;
 
+    /** @var Closure(): ?string */
+    private Closure $legacyPath;
+
+    /**
+     * @param  string|Closure(): string  $path
+     * @param  string|Closure(): ?string|null  $legacyPath
+     */
+    public function __construct(string|Closure $path, string|Closure|null $legacyPath = null)
+    {
+        $this->path = $path instanceof Closure ? $path : fn (): string => $path;
+        $this->legacyPath = $legacyPath instanceof Closure ? $legacyPath : fn (): ?string => $legacyPath;
+    }
+
+    /**
+     * The home folder is looked up only when the configuration is used. A
+     * missing HOME then fails as an ordinary command error, and commands that
+     * never touch saved merchants, such as QUICKPAY_API_KEY runs, still work.
+     */
     public static function inHome(HomeDirectory $home): self
     {
-        $home = rtrim($home->path(), DIRECTORY_SEPARATOR);
+        $base = fn (): string => rtrim($home->path(), DIRECTORY_SEPARATOR);
 
-        return new self($home.'/.config/quickpay-cli/config.json', $home.'/.config/quickpay/config.json');
+        return new self(
+            fn (): string => $base().'/.config/quickpay-cli/config.json',
+            fn (): string => $base().'/.config/quickpay/config.json',
+        );
     }
 
     public function path(): string
     {
-        return $this->path;
+        return ($this->path)();
     }
 
     /**
@@ -38,19 +58,22 @@ final readonly class MerchantStore
      */
     public function leftoverLegacyCredential(): ?string
     {
-        return $this->legacyPath !== null && (file_exists($this->legacyPath) || is_link($this->legacyPath))
-            ? $this->legacyPath
+        $legacyPath = ($this->legacyPath)();
+
+        return $legacyPath !== null && (file_exists($legacyPath) || is_link($legacyPath))
+            ? $legacyPath
             : null;
     }
 
     /** @return MerchantConfig */
     public function read(): array
     {
-        if (! file_exists($this->path) && ! is_link($this->path)) {
+        $path = $this->path();
+        if (! file_exists($path) && ! is_link($path)) {
             return ['default_merchant' => null, 'merchants' => []];
         }
 
-        $contents = is_file($this->path) ? @file_get_contents($this->path) : false;
+        $contents = is_file($path) ? @file_get_contents($path) : false;
         if ($contents === false) {
             throw new CredentialException('Quickpay CLI merchant configuration cannot be read.');
         }
@@ -62,7 +85,9 @@ final readonly class MerchantStore
         }
 
         if ($config instanceof stdClass && property_exists($config, 'api_key')) {
-            throw new CredentialException('Unsupported single-key configuration. Add merchants again with quickpay merchants:add <name> after removing this unsupported file.');
+            $location = ResponseBodySanitizer::terminalLine($path, '');
+
+            throw new CredentialException("Quickpay CLI merchant configuration {$location} uses the unsupported single-key format. Remove that file, then add merchants again with quickpay merchants:add <name>.");
         }
 
         if (! $config instanceof stdClass
@@ -75,7 +100,13 @@ final readonly class MerchantStore
 
         $merchants = [];
         foreach (get_object_vars($config->merchants) as $name => $merchant) {
-            MerchantName::validate((string) $name);
+            try {
+                MerchantName::validate((string) $name);
+            } catch (CredentialException $exception) {
+                $location = ResponseBodySanitizer::terminalLine($path, '');
+
+                throw new CredentialException("Quickpay CLI merchant configuration {$location} contains an invalid merchant name. {$exception->getMessage()}");
+            }
             if (! $merchant instanceof stdClass
                 || ! is_string($merchant->api_key ?? null)
                 || trim($merchant->api_key) === '') {
@@ -198,20 +229,21 @@ final readonly class MerchantStore
     /** @param Closure(MerchantConfig): MerchantConfig $change */
     private function mutate(Closure $change): void
     {
-        $directory = dirname($this->path);
+        $file = $this->path();
+        $directory = dirname($file);
         if ((! is_dir($directory) && ! @mkdir($directory, 0700, true)) || ! @chmod($directory, 0700)) {
             throw new CredentialException('Unable to store merchant credentials: the config directory is not writable.');
         }
 
         // ponytail: one lock for the small credential registry; split storage if write contention matters.
-        $lock = @fopen($this->path.'.lock', 'c');
+        $lock = @fopen($file.'.lock', 'c');
         if ($lock === false) {
             throw new CredentialException('Unable to lock merchant credentials.');
         }
 
         $temporary = '';
         try {
-            if (! @chmod($this->path.'.lock', 0600) || ! flock($lock, LOCK_EX)) {
+            if (! @chmod($file.'.lock', 0600) || ! flock($lock, LOCK_EX)) {
                 throw new CredentialException('Unable to lock merchant credentials.');
             }
             $config = $change($this->read());
@@ -219,12 +251,12 @@ final readonly class MerchantStore
                 'default_merchant' => $config['default_merchant'],
                 'merchants' => (object) $config['merchants'],
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR).PHP_EOL;
-            $path = @tempnam($directory, '.'.basename($this->path).'.');
+            $path = @tempnam($directory, '.'.basename($file).'.');
             if ($path === false) {
                 throw new CredentialException('Unable to create a temporary merchant configuration.');
             }
             $temporary = $path;
-            if (@file_put_contents($temporary, $json) === false || ! @chmod($temporary, 0600) || ! @rename($temporary, $this->path)) {
+            if (@file_put_contents($temporary, $json) === false || ! @chmod($temporary, 0600) || ! @rename($temporary, $file)) {
                 throw new CredentialException('Unable to store merchant credentials atomically.');
             }
             $temporary = '';

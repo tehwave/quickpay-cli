@@ -84,3 +84,27 @@ it('rejects a directory masquerading as a project file', function (): void {
 it('returns no selection when no binding exists', function (): void {
     expect((new ProjectMerchantFile($this->tempDirectory))->find())->toBeNull();
 });
+
+it('finds the current user without the posix extension', function (): void {
+    $probe = $this->tempDirectory.'/probe';
+    touch($probe);
+    expect(ProjectMerchantFile::temporaryFileOwner())->toBe(fileowner($probe))
+        ->and(ProjectMerchantFile::currentUser())->toBe(fileowner($probe));
+});
+
+it('checks the owner before reading a binding', function (): void {
+    // An unreadable file shows the order: reading first would fail with
+    // "cannot be read" before the owner was ever checked.
+    $path = $this->tempDirectory.'/.quickpay-cli.json';
+    file_put_contents($path, '{"merchant":"shop-a"}');
+    chmod($path, 0000);
+    $otherUser = fileowner($path) + 1;
+    expect(fn () => (new ProjectMerchantFile($this->tempDirectory.'/nested', $otherUser))->find())
+        ->toThrow(CredentialException::class, 'not owned by the current user');
+})->skip(fn (): bool => function_exists('posix_geteuid') && posix_geteuid() === 0, 'root can read any file');
+
+it('refuses an oversized binding without parsing it', function (): void {
+    file_put_contents($this->tempDirectory.'/.quickpay-cli.json', '{"merchant":"shop-a"}'.str_repeat(' ', 4096));
+    expect(fn () => (new ProjectMerchantFile($this->tempDirectory.'/nested'))->find())
+        ->toThrow(CredentialException::class, 'too large to hold only a merchant name');
+});

@@ -61,7 +61,7 @@ class SelectMerchantCommand extends BaseCommand
             } else {
                 $store->select($name);
                 $this->info('Global default merchant selected: '.$name);
-                $this->explainProjectOverride($project, $name);
+                $this->explainProjectOverride($project, $name, array_keys($config['merchants']));
             }
 
             return self::SUCCESS;
@@ -73,8 +73,10 @@ class SelectMerchantCommand extends BaseCommand
     /**
      * A project binding outranks the global default, so the new default does
      * not apply here. Say so rather than imply it is now in use.
+     *
+     * @param  list<string>  $saved
      */
-    private function explainProjectOverride(ProjectMerchantFile $project, string $name): void
+    private function explainProjectOverride(ProjectMerchantFile $project, string $name, array $saved): void
     {
         try {
             $bound = $project->find();
@@ -84,8 +86,16 @@ class SelectMerchantCommand extends BaseCommand
             return;
         }
 
-        if ($bound !== null && $bound !== $name) {
-            $this->comment("Commands in this folder still use {$bound} from the nearest .quickpay-cli.json.");
+        if ($bound === null || $bound === $name) {
+            return;
         }
+
+        if (in_array($bound, $saved, true)) {
+            $this->comment("Commands in this folder still use {$bound} from the nearest .quickpay-cli.json.");
+
+            return;
+        }
+
+        $this->warn("Commands in this folder fail until you fix the nearest .quickpay-cli.json: it selects {$bound}, which is not saved.");
     }
 }

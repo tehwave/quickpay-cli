@@ -28,3 +28,8 @@ it('rejects malformed header names and control characters', function (string $he
     'leading control in name' => "\tX-Test:value",
     'trailing control in value' => "X-Test:value\r",
 ]);
+
+it('refuses headers that would change the request method', function (string $header) {
+    expect(fn () => RawApiHeaderParser::parse([$header.':DELETE']))
+        ->toThrow(InvalidArgumentException::class, 'cannot be sent');
+})->with(['X-HTTP-Method-Override', 'x-http-method-override', 'X-HTTP-Method', 'X-Method-Override']);

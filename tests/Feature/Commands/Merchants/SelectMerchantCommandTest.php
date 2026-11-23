@@ -57,6 +57,17 @@ it('says when a project binding still outranks the new global default', function
     Http::assertNothingSent();
 });
 
+it('warns when the project binding names a merchant that is no longer saved', function (): void {
+    $this->store->add('shop-a', 'fake-secret-a');
+    $this->store->add('shop-b', 'fake-secret-b');
+    $this->artisan('merchants:select', ['name' => 'shop-a', '--local' => true])->assertExitCode(0);
+    $this->store->remove('shop-a');
+    $this->artisan('merchants:select', ['name' => 'shop-b'])
+        ->expectsOutputToContain('Commands in this folder fail until you fix the nearest .quickpay-cli.json: it selects shop-a, which is not saved.')
+        ->doesntExpectOutputToContain('still use')
+        ->assertExitCode(0);
+});
+
 it('rejects environment overrides before changing selection', function (bool $named): void {
     $this->store->add('shop-a', 'fake-secret-a');
     putenv('QUICKPAY_API_KEY=fake-environment');

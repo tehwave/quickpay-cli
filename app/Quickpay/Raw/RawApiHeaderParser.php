@@ -16,6 +16,17 @@ final class RawApiHeaderParser
     ];
 
     /**
+     * Headers that ask a server to treat a request as another method. The
+     * method argument alone decides what a request is, so a read-only
+     * merchant's GET can never be turned into a write.
+     */
+    private const METHOD_OVERRIDE_HEADERS = [
+        'x-http-method-override',
+        'x-http-method',
+        'x-method-override',
+    ];
+
+    /**
      * @param  array<int, string>  $fields
      * @return array<string, string>
      */
@@ -43,6 +54,10 @@ final class RawApiHeaderParser
             if (preg_match("/\A[!#$%&'*+.^_`|~0-9A-Za-z-]+\z/D", $name) !== 1
                 || preg_match('/[\x00-\x1F\x7F]/', $value) === 1) {
                 throw new InvalidArgumentException('Raw API header names and values must not contain invalid characters.');
+            }
+
+            if (in_array(strtolower($name), self::METHOD_OVERRIDE_HEADERS, true)) {
+                throw new InvalidArgumentException("The {$name} header cannot be sent. Pass the method you mean as the method argument.");
             }
 
             if (in_array(strtolower($name), self::PROTECTED_HEADERS, true)) {

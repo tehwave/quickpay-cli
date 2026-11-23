@@ -14,6 +14,7 @@ use App\Commands\Payments\RefundPaymentCommand;
 use App\Console\Terminal\StdinTerminalDetector;
 use App\Credentials\ApiKeyResolver;
 use App\Credentials\EnvironmentVariables;
+use App\Credentials\HomeDirectory;
 use App\Credentials\MerchantStore;
 use App\Credentials\ProjectMerchantFile;
 use App\Quickpay\QuickpayClient;
@@ -304,3 +305,23 @@ it('does not warn about the private key when it cannot belong to another saved m
     expect($tester->execute(['payment-id' => '42', '--to' => 'http://localhost/callback'], ['capture_stderr_separately' => true]))->toBe(0)
         ->and($tester->getDisplay().$tester->getErrorOutput())->not->toContain('QUICKPAY_PRIVATE_KEY');
 })->with(['environment API key' => true, 'saved merchant fetching its own key' => false]);
+
+it('uses QUICKPAY_API_KEY and reports a clean error when no home folder is set', function (): void {
+    $saved = ['HOME' => getenv('HOME'), 'USERPROFILE' => getenv('USERPROFILE')];
+    putenv('HOME');
+    putenv('USERPROFILE');
+    putenv('QUICKPAY_API_KEY=fake-environment');
+    try {
+        $store = MerchantStore::inHome(new HomeDirectory(new EnvironmentVariables));
+        app()->instance(MerchantStore::class, $store);
+        app()->instance(ApiKeyResolver::class, new ApiKeyResolver(new EnvironmentVariables, $store, $this->project));
+        Http::fake(['https://api.quickpay.net/ping' => Http::response(['msg' => 'pong'])]);
+        $this->artisan('api', ['method' => 'GET', 'path' => '/ping', '--json' => true])->assertExitCode(0);
+        Http::assertSentCount(1);
+        $this->artisan('merchants:list')->expectsOutputToContain('Unable to locate the home directory')->assertExitCode(1);
+    } finally {
+        foreach ($saved as $name => $value) {
+            $value === false ? putenv($name) : putenv("{$name}={$value}");
+        }
+    }
+});
