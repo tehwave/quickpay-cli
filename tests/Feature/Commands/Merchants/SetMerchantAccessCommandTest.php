@@ -12,8 +12,26 @@ it('restricts access without an interactive terminal', function (array $flags, a
 })->with([
     'block writes' => [['--no-write' => true], ['read' => true, 'write' => false], 'read-only'],
     'block reads' => [['--no-read' => true], ['read' => false, 'write' => true], 'write-only'],
-    'block both' => [['--no-read' => true, '--no-write' => true], ['read' => false, 'write' => false], 'no API access'],
+    'block both' => [['--no-read' => true, '--no-write' => true], ['read' => false, 'write' => false], 'reads and writes blocked'],
+    'block writes while keeping reads' => [['--read' => true, '--no-write' => true], ['read' => true, 'write' => false], 'read-only'],
 ]);
+
+it('allows what is already allowed without asking or writing', function (): void {
+    $this->store->add('shop-a', 'fake-secret-a', write: false);
+    $before = file_get_contents($this->store->path());
+    $this->artisan('merchants:access', ['name' => 'shop-a', '--read' => true, '--no-interaction' => true])
+        ->expectsOutputToContain('Access for shop-a: read-only')->assertExitCode(0);
+    expect(file_get_contents($this->store->path()))->toBe($before);
+});
+
+it('still applies a requested block when allowing is declined', function (): void {
+    $this->store->add('shop-a', 'fake-secret-a', read: false);
+    $this->artisan('merchants:access', ['name' => 'shop-a', '--read' => true, '--no-write' => true])
+        ->expectsConfirmation('Allow read requests for shop-a?', 'no')
+        ->expectsOutputToContain('Read requests stay blocked.')
+        ->expectsOutputToContain('Access for shop-a: reads and writes blocked')->assertExitCode(0);
+    expect($this->store->read()['merchants']['shop-a'])->toBe(['api_key' => 'fake-secret-a', 'read' => false, 'write' => false]);
+});
 
 it('allows blocked requests again only after an interactive confirmation', function (array $flags, string $question, array $saved): void {
     $this->store->add('shop-a', 'fake-secret-a', read: false, write: false);

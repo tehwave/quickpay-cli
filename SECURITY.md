@@ -61,8 +61,10 @@ refuses any request they block before sending it: `GET` is a read and every
 other method is a write. Capture, refund, cancel and raw mutations check the
 flags before inspecting a payment or asking for confirmation. The credential
 check behind `merchants:add` and `merchants:active --check` is exempt, because it
-reads no merchant data. Blocking works anywhere; allowing requests again needs
-an interactive terminal and a confirmation. A key from `QUICKPAY_API_KEY` has
+reads no merchant data. Blocking works anywhere; allowing requests again, with
+`merchants:access` or `merchants:add --replace`, needs an interactive terminal
+and a confirmation. Flags are read when a command starts, so a running
+`callbacks:watch` keeps the access it started with. A key from `QUICKPAY_API_KEY` has
 full access. The flags are a local guardrail, not Quickpay permissions: anyone
 who can edit the configuration file can change them.
 

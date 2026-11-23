@@ -30,13 +30,27 @@ final readonly class MerchantAccess
         return $this->read && $this->write;
     }
 
+    /**
+     * The request types a change would allow again. Allowing what is already
+     * allowed lifts nothing, so it never needs a person to confirm it.
+     *
+     * @return list<string>
+     */
+    public function lifts(?bool $read, ?bool $write): array
+    {
+        return array_keys(array_filter([
+            'read' => $read === true && ! $this->read,
+            'write' => $write === true && ! $this->write,
+        ]));
+    }
+
     public function label(): string
     {
         return match (true) {
             $this->read && $this->write => 'read and write',
             $this->read => 'read-only',
             $this->write => 'write-only',
-            default => 'no API access',
+            default => 'reads and writes blocked',
         };
     }
 }

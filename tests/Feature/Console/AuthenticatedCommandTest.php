@@ -252,7 +252,8 @@ it('blocks reads for a write-only merchant without retrying', function (string $
     $this->store->add('shop-w', 'fake-secret-w', read: false);
     Http::fake();
     $this->artisan($command, [...$arguments, '--merchant' => 'shop-w'])
-        ->expectsOutputToContain('does not allow read requests')->assertExitCode(1);
+        ->expectsOutputToContain('does not allow read requests')
+        ->doesntExpectOutputToContain('Watching')->assertExitCode(1);
     Http::assertNothingSent();
 })->with([
     'get' => ['payments:get', ['id' => '42']],

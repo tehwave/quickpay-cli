@@ -116,7 +116,7 @@ it('saves access flags given when adding a merchant', function (array $flags, ar
     'default' => [[], ['read' => true, 'write' => true], null],
     'read-only' => [['--no-write' => true], ['read' => true, 'write' => false], 'read-only'],
     'write-only' => [['--no-read' => true], ['read' => false, 'write' => true], 'write-only'],
-    'none' => [['--no-read' => true, '--no-write' => true], ['read' => false, 'write' => false], 'no API access'],
+    'none' => [['--no-read' => true, '--no-write' => true], ['read' => false, 'write' => false], 'reads and writes blocked'],
 ]);
 
 it('keeps access flags when replacing a credential', function (): void {
@@ -124,5 +124,34 @@ it('keeps access flags when replacing a credential', function (): void {
     $this->store->add('shop-a', 'fake-original', write: false);
     $this->artisan('merchants:add', ['name' => 'shop-a', '--replace' => true])
         ->expectsQuestion('API key', 'fake-replacement')->expectsOutputToContain('Access: read-only')->assertExitCode(0);
+    expect($this->store->read()['merchants']['shop-a'])->toBe(['api_key' => 'fake-replacement', 'read' => true, 'write' => false]);
+});
+
+it('asks before a replacement lifts a saved block', function (): void {
+    Http::fake(['https://api.quickpay.net/ping' => Http::response(['scope' => 'merchant'])]);
+    $this->store->add('shop-a', 'fake-original', write: false);
+    $this->artisan('merchants:add', ['name' => 'shop-a', '--replace' => true, '--write' => true])
+        ->expectsConfirmation('Allow write requests for shop-a?', 'yes')
+        ->expectsQuestion('API key', 'fake-replacement')
+        ->expectsOutputToContain('Access: read and write')->assertExitCode(0);
+    expect($this->store->read()['merchants']['shop-a'])->toBe(['api_key' => 'fake-replacement', 'read' => true, 'write' => true]);
+});
+
+it('keeps the saved merchant when lifting a block is declined', function (): void {
+    $this->store->add('shop-a', 'fake-original', read: false, write: false);
+    $before = file_get_contents($this->store->path());
+    $this->artisan('merchants:add', ['name' => 'shop-a', '--replace' => true, '--read' => true])
+        ->expectsConfirmation('Allow read requests for shop-a?', 'no')
+        ->expectsOutputToContain('Cancelled.')->assertExitCode(0);
+    expect(file_get_contents($this->store->path()))->toBe($before);
+    Http::assertNothingSent();
+});
+
+it('does not ask when a replacement allows what is already allowed', function (): void {
+    Http::fake(['https://api.quickpay.net/ping' => Http::response(['scope' => 'merchant'])]);
+    $this->store->add('shop-a', 'fake-original', write: false);
+    $this->artisan('merchants:add', ['name' => 'shop-a', '--replace' => true, '--read' => true])
+        ->expectsQuestion('API key', 'fake-replacement')
+        ->expectsOutputToContain('Access: read-only')->assertExitCode(0);
     expect($this->store->read()['merchants']['shop-a'])->toBe(['api_key' => 'fake-replacement', 'read' => true, 'write' => false]);
 });

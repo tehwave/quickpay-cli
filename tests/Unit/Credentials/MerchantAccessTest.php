@@ -28,7 +28,7 @@ it('names each access combination', function (bool $read, bool $write, string $l
     'full' => [true, true, 'read and write', true],
     'read-only' => [true, false, 'read-only', false],
     'write-only' => [false, true, 'write-only', false],
-    'none' => [false, false, 'no API access', false],
+    'none' => [false, false, 'reads and writes blocked', false],
 ]);
 
 it('grants full access by default only through the named constructor', function (): void {

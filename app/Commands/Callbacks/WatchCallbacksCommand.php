@@ -57,6 +57,9 @@ class WatchCallbacksCommand extends AuthenticatedCommand
                 $interval = $this->interval();
                 $deliveryAttempts = $this->deliveryAttempts();
                 $apiKey = $authenticated->apiKey->value();
+                // Watching only polls with GET. Checking first keeps a merchant
+                // that blocks reads from announcing a watch it cannot run.
+                $authenticated->client->authorize('GET');
                 $this->writeMerchantContext($authenticated);
                 $warning = $privateKeys->overrideWarning($authenticated->apiKey);
                 if ($warning !== null) {

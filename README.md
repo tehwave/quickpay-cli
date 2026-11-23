@@ -71,7 +71,9 @@ quickpay merchants:access "My Website" --write
 ```
 
 `--no-read` blocks `GET` requests the same way. A blocked request stops before
-anything reaches Quickpay. Allowing requests again asks you to confirm in an
+anything reaches Quickpay. A change applies to commands you start afterwards, so
+restart a running `callbacks:watch`. Allowing requests again, with
+`merchants:access` or `merchants:add --replace`, asks you to confirm in an
 interactive terminal, so a script or agent can't lift a block on its own.
 Capture, refund and cancel need both reads and writes, because they show you the
 payment before asking to continue. A key in `QUICKPAY_API_KEY` always has full
