@@ -1,6 +1,7 @@
 <?php
 
 use App\Console\Terminal\StdinTerminalDetector;
+use App\Credentials\MerchantStore;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -17,6 +18,18 @@ it('adds a merchant after a private credential check', function (): void {
         && $request->method() === 'GET' && $request->header('Authorization') === ['Basic '.base64_encode(':fake-secret-a')]);
 });
 
+it('tells upgraders that the old credential file is unused without reading it', function (): void {
+    Http::fake(['https://api.quickpay.net/ping' => Http::response(['scope' => 'merchant'])]);
+    $legacy = $this->tempDirectory.'/legacy-config.json';
+    file_put_contents($legacy, '{"api_key":"fake-legacy-secret"}');
+    $this->app->instance(MerchantStore::class, new MerchantStore($this->store->path(), $legacy));
+    $this->artisan('merchants:add', ['name' => 'My Website'])
+        ->expectsQuestion('API key', 'fake-secret-a')
+        ->expectsOutputToContain('no longer uses')
+        ->doesntExpectOutputToContain('fake-legacy-secret')->assertExitCode(0);
+    expect(file_get_contents($legacy))->toBe('{"api_key":"fake-legacy-secret"}');
+});
+
 it('rejects duplicate and invalid names before prompting', function (string $name): void {
     $this->store->add('shop-a', 'fake-original');
     $before = file_get_contents($this->store->path());
@@ -31,6 +44,15 @@ it('replaces a credential only after successful validation', function (): void {
     $this->artisan('merchants:add', ['name' => 'shop-a', '--replace' => true])
         ->expectsQuestion('API key', 'fake-replacement')->assertExitCode(0);
     expect($this->store->read()['merchants']['shop-a']['api_key'])->toBe('fake-replacement');
+});
+
+it('refuses to replace an unsaved merchant before prompting', function (): void {
+    $this->store->add('My Website', 'fake-original');
+    $before = file_get_contents($this->store->path());
+    $this->artisan('merchants:add', ['name' => 'My Webiste', '--replace' => true])
+        ->expectsOutputToContain('not saved')->assertExitCode(1);
+    Http::assertNothingSent();
+    expect(file_get_contents($this->store->path()))->toBe($before);
 });
 
 it('preserves the original credential after a rejected replacement', function (): void {

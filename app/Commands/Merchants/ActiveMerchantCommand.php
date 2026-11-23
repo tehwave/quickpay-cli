@@ -47,12 +47,10 @@ class ActiveMerchantCommand extends AuthenticatedCommand
         if ($this->option('json')) {
             $this->getOutput()->write(JsonOutput::value($status, ''));
         } else {
-            $this->line('Merchant: '.($status['merchant'] ?? 'not associated with a saved merchant'));
+            $this->line('Merchant: '.($status['merchant'] ?? ($key === null ? 'none' : 'not associated with a saved merchant')));
             $this->line('Selection source: '.($status['selection_source'] ?? 'none'));
             $this->line('Credential source: '.($status['credential_source'] ?? 'none'));
             $this->line('Credentials configured: '.($status['configured'] ? 'yes' : 'no'));
-            $this->line('API base URL: '.$status['api_base_url']);
-            $this->line('API version: '.$status['api_version']);
             $this->line('API access: '.match ($authenticated) {
                 true => 'verified',
                 false => 'failed',
@@ -66,7 +64,7 @@ class ActiveMerchantCommand extends AuthenticatedCommand
     private function authenticationError(?ApiKey $key, MerchantAuthenticationCheck $check): ?string
     {
         if ($key === null) {
-            return 'No Quickpay credentials found. Run quickpay merchants:add <name> first.';
+            return self::NO_MERCHANT_SELECTED;
         }
 
         try {

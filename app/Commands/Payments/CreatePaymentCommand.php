@@ -43,6 +43,7 @@ class CreatePaymentCommand extends AuthenticatedCommand
                 'order_id' => $orderId,
                 'currency' => $currency,
             ];
+            $this->writeMerchantContext($authenticated);
             $result = $authenticated->payments->create($body);
             $payment = $result->data;
 

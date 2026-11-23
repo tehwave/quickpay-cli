@@ -12,7 +12,11 @@ final class MerchantConfigurationJson
 
         // Native decoding discards duplicate fields. Inspect complete JSON string
         // tokens per object so escaped names collide, but quoted values do not.
-        preg_match_all('/"(?:[^"\\\\]|\\\\.)*"|[{}:]/s', $contents, $matches);
+        // Possessive quantifiers keep long strings within PCRE limits, and a
+        // failed scan rejects the file instead of skipping the duplicate check.
+        if (preg_match_all('/"(?:[^"\\\\]++|\\\\.)*+"|[{}:]/s', $contents, $matches) === false) {
+            throw new JsonException('Configuration could not be checked for duplicate JSON properties.');
+        }
         $tokens = $matches[0];
         $objects = [];
         foreach ($tokens as $index => $token) {

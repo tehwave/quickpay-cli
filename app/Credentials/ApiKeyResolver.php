@@ -45,7 +45,10 @@ final readonly class ApiKeyResolver
         }
 
         if (! isset($config['merchants'][$name])) {
-            throw new CredentialException('Selected merchant is not saved. Run quickpay merchants:list to see saved names.');
+            throw new CredentialException(match ($source) {
+                'project' => 'The nearest .quickpay-cli.json selects a merchant that is not saved. Run quickpay merchants:list to see saved names.',
+                default => 'Selected merchant is not saved. Run quickpay merchants:list to see saved names.',
+            });
         }
 
         return new ApiKey($config['merchants'][$name]['api_key'], 'config file', $name, $source);

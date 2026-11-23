@@ -7,6 +7,8 @@ use App\Commands\Api\ApiRequestCommand;
 use App\Commands\Callbacks\WatchCallbacksCommand;
 use App\Commands\Payments\CancelPaymentCommand;
 use App\Commands\Payments\CapturePaymentCommand;
+use App\Commands\Payments\CreatePaymentCommand;
+use App\Commands\Payments\CreatePaymentLinkCommand;
 use App\Commands\Payments\RefundPaymentCommand;
 use App\Console\Terminal\StdinTerminalDetector;
 use App\Credentials\ApiKeyResolver;
@@ -123,6 +125,19 @@ it('identifies a selected merchant before confirming a raw mutation', function (
     expect(strpos($tester->getErrorOutput(), 'Merchant:'))->toBeLessThan(strpos($tester->getErrorOutput(), 'Continue?'));
     Http::assertSent(fn (Request $request): bool => $request->header('Authorization') === ['Basic '.base64_encode(':fake-secret-b')]);
 });
+
+it('identifies the selected merchant before creating remote payment state', function (string $class, array $arguments, string $path, string $raw): void {
+    Http::fake(['https://api.quickpay.net'.$path => Http::response($raw)]);
+    $command = new $class;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+    expect($tester->execute([...$arguments, '--merchant' => 'shop-b', '--json' => true], ['capture_stderr_separately' => true]))->toBe(0)
+        ->and($tester->getDisplay())->toBe($raw)
+        ->and($tester->getErrorOutput())->toContain('Merchant: shop-b')->toContain('Credential source: config file');
+})->with([
+    'create' => [CreatePaymentCommand::class, ['order-id' => 'order-42'], '/payments', '{"id":42}'],
+    'link' => [CreatePaymentLinkCommand::class, ['id' => '42', 'amount' => '1000'], '/payments/42/link', '{"url":"https://payment.quickpay.net/link/abc"}'],
+]);
 
 it('selects the same saved key for every other authenticated command family', function (string $command, array $arguments, string $path, mixed $body): void {
     Http::fake([

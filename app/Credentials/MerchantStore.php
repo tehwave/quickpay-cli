@@ -11,16 +11,33 @@ use stdClass;
 /** @phpstan-type MerchantConfig array{default_merchant: ?string, merchants: array<string, array{api_key: string}>} */
 final readonly class MerchantStore
 {
-    public function __construct(private string $path) {}
+    public function __construct(
+        private string $path,
+        private ?string $legacyPath = null,
+    ) {}
 
     public static function inHome(HomeDirectory $home): self
     {
-        return new self(rtrim($home->path(), DIRECTORY_SEPARATOR).'/.config/quickpay-cli/config.json');
+        $home = rtrim($home->path(), DIRECTORY_SEPARATOR);
+
+        return new self($home.'/.config/quickpay-cli/config.json', $home.'/.config/quickpay/config.json');
     }
 
     public function path(): string
     {
         return $this->path;
+    }
+
+    /**
+     * Returns the pre-merchant credential path when that file still exists.
+     *
+     * It is never read or migrated; callers only tell the user it is unused.
+     */
+    public function leftoverLegacyCredential(): ?string
+    {
+        return $this->legacyPath !== null && (file_exists($this->legacyPath) || is_link($this->legacyPath))
+            ? $this->legacyPath
+            : null;
     }
 
     /** @return MerchantConfig */
@@ -83,6 +100,9 @@ final readonly class MerchantStore
         $this->mutate(function (array $config) use ($name, $apiKey, $replace): array {
             if (isset($config['merchants'][$name]) && ! $replace) {
                 throw new CredentialException('Merchant is already saved. Use --replace to replace its credential.');
+            }
+            if (! isset($config['merchants'][$name]) && $replace) {
+                throw new CredentialException('Merchant is not saved, so there is no credential to replace. Run quickpay merchants:list to see saved names.');
             }
             if ($config['merchants'] === []) {
                 $config['default_merchant'] = $name;

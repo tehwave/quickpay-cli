@@ -48,7 +48,8 @@ merchant by its local label; it cannot provide credentials, API headers or URLs.
 Neither a binding nor selecting a merchant authorizes a payment mutation.
 
 Explicit `--merchant` selection overrides a project binding and global default.
-Malformed or stale bindings fail without selecting another merchant. A non-empty
+Malformed or stale bindings, and bindings owned by another user, fail without
+selecting another merchant. A non-empty
 `QUICKPAY_API_KEY` cannot be combined with an explicit or project selection.
 Each command resolves its key once, so running watchers and inspect/confirm
 workflows stay attached to the same credential even if local configuration

@@ -34,6 +34,16 @@ it('reports absent credentials and fails only a requested readiness check', func
     Http::assertNothingSent();
 });
 
+it('points to merchant selection when saved merchants have no default', function (): void {
+    $this->store->add('shop-a', 'fake-secret-a');
+    $this->store->add('shop-b', 'fake-secret-b');
+    $this->store->remove('shop-a');
+    [$exit, $output, $errors] = merchantCommandResult(ActiveMerchantCommand::class, ['--check' => true]);
+    expect($exit)->toBe(1)->and($output)->toContain('Merchant: none')->not->toContain('API version')
+        ->and($errors)->toContain('merchants:select');
+    Http::assertNothingSent();
+});
+
 it('reports environment-only credentials without inferring a merchant label', function (): void {
     putenv('QUICKPAY_API_KEY=fake-environment');
     [$exit, $output] = merchantCommandResult(ActiveMerchantCommand::class, ['--json' => true]);

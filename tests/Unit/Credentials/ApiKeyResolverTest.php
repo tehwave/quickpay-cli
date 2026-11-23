@@ -55,7 +55,7 @@ it('bypasses malformed projects for an explicit selection', function (): void {
 it('rejects stale project and unknown explicit selections', function (): void {
     $this->store->add('shop-a', 'fake-secret-a');
     $this->project->save('shop-b');
-    expect(fn () => $this->resolver->resolve())->toThrow(CredentialException::class);
+    expect(fn () => $this->resolver->resolve())->toThrow(CredentialException::class, '.quickpay-cli.json');
     expect(fn () => $this->resolver->resolve('shop-b'))->toThrow(CredentialException::class);
 });
 

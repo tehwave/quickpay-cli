@@ -33,7 +33,7 @@ it('rejects malformed nearest bindings without falling back or overwriting', fun
     $path = $this->tempDirectory.'/nested/.quickpay-cli.json';
     file_put_contents($path, $contents);
     $file = new ProjectMerchantFile($this->tempDirectory.'/nested');
-    expect(fn () => $file->find())->toThrow(CredentialException::class);
+    expect(fn () => $file->find())->toThrow(CredentialException::class, $path);
     expect(fn () => $file->save('shop-b'))->toThrow(CredentialException::class);
     expect(file_get_contents($path))->toBe($contents);
 })->with([
@@ -44,6 +44,13 @@ it('rejects malformed nearest bindings without falling back or overwriting', fun
     'duplicate selector' => '{"merchant":"shop-a","merchant":"shop-b"}',
     'escaped duplicate selector' => '{"merchant":"shop-a","merch\\u0061nt":"shop-b"}',
 ]);
+
+it('rejects an ancestor binding owned by another user', function (): void {
+    (new ProjectMerchantFile($this->tempDirectory))->save('shop-a');
+    $otherUser = fileowner($this->tempDirectory.'/.quickpay-cli.json') + 1;
+    expect(fn () => (new ProjectMerchantFile($this->tempDirectory.'/nested', $otherUser))->find())
+        ->toThrow(CredentialException::class, 'not owned by the current user');
+});
 
 it('rejects a directory masquerading as a project file', function (): void {
     mkdir($this->tempDirectory.'/nested/.quickpay-cli.json');

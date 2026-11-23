@@ -16,6 +16,9 @@ use UnexpectedValueException;
 
 abstract class AuthenticatedCommand extends BaseCommand
 {
+    // Covers both an empty store and saved merchants without a global default.
+    protected const NO_MERCHANT_SELECTED = 'No merchant selected. Run quickpay merchants:add <name>, or quickpay merchants:select <name> to choose a saved default.';
+
     public function __construct()
     {
         parent::__construct();
@@ -33,7 +36,7 @@ abstract class AuthenticatedCommand extends BaseCommand
         }
 
         if ($authenticated === null) {
-            return $this->failure('No Quickpay credentials found. Run quickpay merchants:add <name> first.');
+            return $this->failure(self::NO_MERCHANT_SELECTED);
         }
 
         try {

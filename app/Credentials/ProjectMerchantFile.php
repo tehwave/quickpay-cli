@@ -2,13 +2,18 @@
 
 namespace App\Credentials;
 
+use App\Console\Output\ResponseBodySanitizer;
 use App\Credentials\Exceptions\CredentialException;
 use JsonException;
 use stdClass;
 
 final readonly class ProjectMerchantFile
 {
-    public function __construct(private ?string $directory = null) {}
+    /** @param ?int $owner Expected binding owner; defaults to the effective user where POSIX is available. */
+    public function __construct(
+        private ?string $directory = null,
+        private ?int $owner = null,
+    ) {}
 
     public function find(): ?string
     {
@@ -63,19 +68,30 @@ final readonly class ProjectMerchantFile
 
     private function read(string $path): string
     {
+        $location = ResponseBodySanitizer::terminalLine($path, '');
         $contents = is_file($path) ? @file_get_contents($path) : false;
         if ($contents === false) {
-            throw new CredentialException('Project merchant binding cannot be read.');
+            throw new CredentialException("Project merchant binding {$location} cannot be read.");
+        }
+        // Upward discovery reaches shared directories such as /tmp. Another
+        // user's binding must not steer which saved merchant this user runs.
+        $owner = $this->owner ?? (function_exists('posix_geteuid') ? posix_geteuid() : null);
+        if ($owner !== null && @fileowner($path) !== $owner) {
+            throw new CredentialException("Project merchant binding {$location} is not owned by the current user.");
         }
         try {
             $config = MerchantConfigurationJson::decode($contents);
         } catch (JsonException) {
-            throw new CredentialException('Project merchant binding is invalid JSON.');
+            throw new CredentialException("Project merchant binding {$location} is invalid JSON.");
         }
         if (! $config instanceof stdClass || count(get_object_vars($config)) !== 1 || ! is_string($config->merchant ?? null)) {
-            throw new CredentialException('Project merchant binding must contain only a merchant name.');
+            throw new CredentialException("Project merchant binding {$location} must contain only a merchant name.");
         }
 
-        return MerchantName::validate($config->merchant);
+        try {
+            return MerchantName::validate($config->merchant);
+        } catch (CredentialException $exception) {
+            throw new CredentialException("Project merchant binding {$location}: {$exception->getMessage()}");
+        }
     }
 }

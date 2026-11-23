@@ -35,15 +35,17 @@ and keep that same explicit selection for inspection and execution. Plain
 
 Selection is an explicit `--merchant`, then the nearest `.quickpay-cli.json`
 found from the working directory upwards, then the global default. Unknown
-names and malformed or stale bindings fail without falling back. A non-empty
+names, malformed or stale bindings, and bindings owned by another user fail
+without falling back. A non-empty
 `QUICKPAY_API_KEY` works independently of saved storage when there is no explicit
 or project selection. Combining that environment key with either selection
 fails; report the conflict rather than silently changing the environment or
 using another merchant. Environment-only access has no inferred saved label.
 
 The first saved merchant becomes the default; adding others keeps an established
-default. Replacing a key requires `merchants:add <name> --replace` and private
-human input; a rejected key preserves existing access. Removing the default
+default. Replacing a key requires `merchants:add <name> --replace` for an
+already saved name and private human input; a rejected key preserves existing
+access. Removing the default
 leaves no default, and bindings to removed names fail. The old `login`, `logout`
 and `auth` commands and `~/.config/quickpay/config.json` are not supported.
 Existing users add their merchants again; no automatic migration occurs.

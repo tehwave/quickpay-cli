@@ -3,6 +3,7 @@
 namespace App\Commands\Merchants;
 
 use App\Console\BaseCommand;
+use App\Console\Output\ResponseBodySanitizer;
 use App\Console\Terminal\StdinTerminalDetector;
 use App\Credentials\ApiKey;
 use App\Credentials\Exceptions\CredentialException;
@@ -28,8 +29,13 @@ class AddMerchantCommand extends BaseCommand
             $name = MerchantName::validate((string) $this->argument('name'));
             $config = $store->read();
 
-            if (isset($config['merchants'][$name]) && ! $this->option('replace')) {
+            $saved = isset($config['merchants'][$name]);
+            if ($saved && ! $this->option('replace')) {
                 return $this->failure('Merchant is already saved. Use --replace to replace its credential.');
+            }
+
+            if (! $saved && $this->option('replace')) {
+                return $this->failure('Merchant is not saved, so there is no credential to replace. Run quickpay merchants:list to see saved names.');
             }
 
             if (! $this->input->isInteractive() || ! $terminal->isTty()) {
@@ -51,6 +57,14 @@ class AddMerchantCommand extends BaseCommand
             $check->check($credential);
             $store->add($name, $apiKey, (bool) $this->option('replace'));
             $this->info('Merchant saved: '.$name);
+
+            $legacy = $store->leftoverLegacyCredential();
+            if ($legacy !== null) {
+                $this->warn(ResponseBodySanitizer::terminalLine(
+                    "Quickpay CLI no longer uses {$legacy} from earlier versions. Delete it to remove the API key it may still contain.",
+                    $apiKey,
+                ));
+            }
 
             return self::SUCCESS;
         } catch (CredentialException|QuickpayRequestException|UnexpectedValueException $exception) {

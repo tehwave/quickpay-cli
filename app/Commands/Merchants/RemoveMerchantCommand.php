@@ -17,10 +17,14 @@ class RemoveMerchantCommand extends BaseCommand
     {
         try {
             $store->remove((string) $this->argument('name'));
+            $config = $store->read();
         } catch (CredentialException $exception) {
             return $this->failure($exception->getMessage());
         }
         $this->info('Saved merchant removed.');
+        if ($config['default_merchant'] === null && $config['merchants'] !== []) {
+            $this->comment('No global default merchant is selected. Run quickpay merchants:select <name> to choose one.');
+        }
         if ($environment->get('QUICKPAY_API_KEY') !== null) {
             $this->comment('QUICKPAY_API_KEY remains configured; unset it to stop using that credential.');
         }

@@ -47,6 +47,14 @@ it('retains existing credentials on duplicate or invalid additions', function (s
     expect(file_get_contents($this->path))->toBe($before);
 })->with(['duplicate' => ['shop-a', 'fake-new'], 'empty key' => ['shop-b', ' '], 'secret label' => ['secret-name', 'secret']]);
 
+it('does not treat a replacement of an unsaved merchant as an addition', function (): void {
+    $store = new MerchantStore($this->path);
+    $store->add('shop-a', 'fake-original');
+    $before = file_get_contents($this->path);
+    expect(fn () => $store->add('shop-b', 'fake-new', true))->toThrow(CredentialException::class, 'not saved');
+    expect(file_get_contents($this->path))->toBe($before);
+});
+
 it('replaces only the explicitly named credential', function (): void {
     $store = new MerchantStore($this->path);
     $store->add('shop-a', 'fake-secret-a');
@@ -118,7 +126,11 @@ it('does not read old namespaced storage', function (): void {
     $store = MerchantStore::inHome(new HomeDirectory(new EnvironmentVariables, $this->tempDirectory));
     expect($store->path())->toBe($this->tempDirectory.'/.config/quickpay-cli/config.json')
         ->and($store->read())->toBe(['default_merchant' => null, 'merchants' => []])
+        ->and($store->leftoverLegacyCredential())->toBe($old)
         ->and(file_get_contents($old))->toBe('{"api_key":"fake-legacy"}');
+    unlink($old);
+    expect($store->leftoverLegacyCredential())->toBeNull()
+        ->and((new MerchantStore($this->path))->leftoverLegacyCredential())->toBeNull();
 });
 
 it('rejects unknown select and remove targets', function (): void {
