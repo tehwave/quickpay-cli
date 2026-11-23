@@ -10,14 +10,13 @@ final readonly class ProjectMerchantFile
 {
     public function __construct(private ?string $directory = null) {}
 
-    /** @return array{merchant: string, path: string}|null */
-    public function find(): ?array
+    public function find(): ?string
     {
         $directory = $this->directory();
         while (true) {
             $path = $directory.'/.quickpay-cli.json';
             if (file_exists($path) || is_link($path)) {
-                return ['merchant' => $this->read($path), 'path' => $path];
+                return $this->read($path);
             }
             $parent = dirname($directory);
             if ($parent === $directory) {
@@ -73,7 +72,7 @@ final readonly class ProjectMerchantFile
         } catch (JsonException) {
             throw new CredentialException('Project merchant binding is invalid JSON.');
         }
-        if (! $config instanceof stdClass || count(get_object_vars($config)) !== 1 || ! isset($config->merchant) || ! is_string($config->merchant)) {
+        if (! $config instanceof stdClass || count(get_object_vars($config)) !== 1 || ! is_string($config->merchant ?? null)) {
             throw new CredentialException('Project merchant binding must contain only a merchant name.');
         }
 

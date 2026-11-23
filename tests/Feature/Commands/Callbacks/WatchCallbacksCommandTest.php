@@ -29,9 +29,6 @@ beforeEach(function () {
 });
 
 afterEach(function () {
-    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($this->merchantProjectDirectory, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST) as $file) {
-        $file->isDir() ? rmdir($file->getPathname()) : unlink($file->getPathname());
-    }
     rmdir($this->merchantProjectDirectory);
     foreach ([
         'QUICKPAY_API_KEY' => $this->originalApiKey,

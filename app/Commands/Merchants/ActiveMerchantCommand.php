@@ -4,6 +4,7 @@ namespace App\Commands\Merchants;
 
 use App\Console\AuthenticatedCommand;
 use App\Console\Output\JsonOutput;
+use App\Credentials\ApiKey;
 use App\Credentials\ApiKeyResolver;
 use App\Credentials\Exceptions\CredentialException;
 use App\Quickpay\Exceptions\QuickpayRequestException;
@@ -27,31 +28,22 @@ class ActiveMerchantCommand extends AuthenticatedCommand
         } catch (CredentialException $exception) {
             return $this->failure($exception->getMessage());
         }
-        $requested = (bool) $this->option('check');
-        $error = null;
-        if ($requested) {
-            if ($key === null) {
-                $error = 'No Quickpay credentials found. Run quickpay merchants:add <name> first.';
-            } else {
-                try {
-                    $check->check($key);
-                } catch (QuickpayRequestException|UnexpectedValueException $exception) {
-                    $error = $key->redact($exception->getMessage());
-                }
-            }
-        }
-        $authenticated = $requested ? $error === null : null;
+
+        $checkRequested = (bool) $this->option('check');
+        $error = $checkRequested ? $this->authenticationError($key, $check) : null;
+        $authenticated = $checkRequested ? $error === null : null;
         $status = [
             'merchant' => $key?->merchant(),
             'selection_source' => $key?->selectionSource(),
             'credential_source' => $key?->source(),
             'configured' => $key !== null,
-            'checked' => $requested,
+            'checked' => $checkRequested,
             'authenticated' => $authenticated,
             'api_base_url' => QuickpayClient::BASE_URL,
             'api_version' => QuickpayClient::API_VERSION,
             'scope' => $authenticated === true ? 'merchant' : null,
         ];
+
         if ($this->option('json')) {
             $this->getOutput()->write(JsonOutput::value($status, ''));
         } else {
@@ -61,9 +53,28 @@ class ActiveMerchantCommand extends AuthenticatedCommand
             $this->line('Credentials configured: '.($status['configured'] ? 'yes' : 'no'));
             $this->line('API base URL: '.$status['api_base_url']);
             $this->line('API version: '.$status['api_version']);
-            $this->line('API access: '.($requested ? ($authenticated ? 'verified' : 'failed') : 'not checked'));
+            $this->line('API access: '.match ($authenticated) {
+                true => 'verified',
+                false => 'failed',
+                null => 'not checked',
+            });
         }
 
         return $error === null ? self::SUCCESS : $this->failure($error);
+    }
+
+    private function authenticationError(?ApiKey $key, MerchantAuthenticationCheck $check): ?string
+    {
+        if ($key === null) {
+            return 'No Quickpay credentials found. Run quickpay merchants:add <name> first.';
+        }
+
+        try {
+            $check->check($key);
+
+            return null;
+        } catch (QuickpayRequestException|UnexpectedValueException $exception) {
+            return $key->redact($exception->getMessage());
+        }
     }
 }

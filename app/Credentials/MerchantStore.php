@@ -48,8 +48,7 @@ final readonly class MerchantStore
         if (! $config instanceof stdClass
             || count(get_object_vars($config)) !== 2
             || ! property_exists($config, 'default_merchant')
-            || ! isset($config->merchants)
-            || ! $config->merchants instanceof stdClass
+            || ! ($config->merchants ?? null) instanceof stdClass
             || ($config->default_merchant !== null && ! is_string($config->default_merchant))) {
             throw new CredentialException('Quickpay CLI merchant configuration has an invalid structure.');
         }
@@ -59,8 +58,7 @@ final readonly class MerchantStore
             MerchantName::validate((string) $name);
             if (! $merchant instanceof stdClass
                 || count(get_object_vars($merchant)) !== 1
-                || ! isset($merchant->api_key)
-                || ! is_string($merchant->api_key)
+                || ! is_string($merchant->api_key ?? null)
                 || trim($merchant->api_key) === '') {
                 throw new CredentialException('Quickpay CLI merchant configuration contains an invalid credential.');
             }
@@ -82,8 +80,6 @@ final readonly class MerchantStore
         if ($apiKey === '') {
             throw new CredentialException('API key cannot be empty.');
         }
-        $this->validateLabel($name, $apiKey);
-
         $this->mutate(function (array $config) use ($name, $apiKey, $replace): array {
             if (isset($config['merchants'][$name]) && ! $replace) {
                 throw new CredentialException('Merchant is already saved. Use --replace to replace its credential.');
@@ -100,7 +96,6 @@ final readonly class MerchantStore
 
     public function select(string $name): void
     {
-        MerchantName::validate($name);
         $this->mutate(function (array $config) use ($name): array {
             $this->requireMerchant($config, $name);
             $config['default_merchant'] = $name;
@@ -111,7 +106,6 @@ final readonly class MerchantStore
 
     public function remove(string $name): void
     {
-        MerchantName::validate($name);
         $this->mutate(function (array $config) use ($name): array {
             $this->requireMerchant($config, $name);
             unset($config['merchants'][$name]);
@@ -123,20 +117,15 @@ final readonly class MerchantStore
         });
     }
 
-    private function validateLabel(string $name, string $apiKey): void
-    {
-        if (CredentialRedactor::containsSensitiveValue($name, $apiKey)) {
-            throw new CredentialException('Merchant name must not contain the API key.');
-        }
-    }
-
     /** @param array<string, array{api_key: string}> $merchants */
     private function validateLabels(array $merchants): void
     {
         // ponytail: quadratic check for the small registry; cache a multi-key matcher if large registries become common.
-        foreach ($merchants as $name => $merchant) {
+        foreach (array_keys($merchants) as $name) {
             foreach ($merchants as $credential) {
-                $this->validateLabel($name, $credential['api_key']);
+                if (CredentialRedactor::containsSensitiveValue($name, $credential['api_key'])) {
+                    throw new CredentialException('Merchant name must not contain the API key.');
+                }
             }
         }
     }

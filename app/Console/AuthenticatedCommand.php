@@ -50,14 +50,20 @@ abstract class AuthenticatedCommand extends BaseCommand
 
     protected function writeMerchantContext(AuthenticatedQuickpay $authenticated): void
     {
-        $output = $this->input->hasOption('json') && $this->input->getOption('json')
-            ? $this->getOutput()->getErrorStyle()
-            : $this->getOutput();
         foreach ([
             'Merchant: '.($authenticated->apiKey->merchant() ?? 'not associated with a saved merchant'),
             'Credential source: '.$authenticated->apiKey->source(),
         ] as $message) {
-            $output->writeln($authenticated->safeLine($message), OutputInterface::OUTPUT_RAW);
+            $this->writeSafetyLine($authenticated->safeLine($message));
         }
+    }
+
+    protected function writeSafetyLine(string $message): void
+    {
+        $output = $this->input->hasOption('json') && $this->input->getOption('json')
+            ? $this->getOutput()->getErrorStyle()
+            : $this->getOutput();
+
+        $output->writeln($message, OutputInterface::OUTPUT_RAW);
     }
 }

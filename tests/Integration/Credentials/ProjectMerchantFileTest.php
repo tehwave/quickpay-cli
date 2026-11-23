@@ -20,10 +20,10 @@ it('resolves the nearest binding from nested directories', function (): void {
     $parent = new ProjectMerchantFile($this->tempDirectory);
     $child = new ProjectMerchantFile($this->tempDirectory.'/nested');
     $parent->save('shop-a');
-    expect($child->find())->toBe(['merchant' => 'shop-a', 'path' => $this->tempDirectory.'/.quickpay-cli.json']);
+    expect($child->find())->toBe('shop-a');
     $child->save('shop-b');
-    expect($child->find())->toBe(['merchant' => 'shop-b', 'path' => $this->tempDirectory.'/nested/.quickpay-cli.json'])
-        ->and($parent->find()['merchant'])->toBe('shop-a')
+    expect($child->find())->toBe('shop-b')
+        ->and($parent->find())->toBe('shop-a')
         ->and(json_decode(file_get_contents($this->tempDirectory.'/nested/.quickpay-cli.json'), true))->toBe(['merchant' => 'shop-b'])
         ->and(glob($this->tempDirectory.'/nested/..quickpay-cli.json.*'))->toBe([]);
 });
@@ -40,7 +40,7 @@ it('rejects malformed nearest bindings without falling back or overwriting', fun
     'broken' => '{broken', 'list' => '[]', 'numeric' => '{"merchant":123}', 'missing' => '{}',
     'secret' => '{"merchant":"shop-a","api_key":"fake-secret"}',
     'url' => '{"merchant":"shop-a","url":"https://other.test"}',
-    'headers' => '{"merchant":"shop-a","headers":{}}', 'invalid name' => '{"merchant":"Shop-a"}',
+    'headers' => '{"merchant":"shop-a","headers":{}}', 'invalid name' => '{"merchant":" My Website"}',
     'duplicate selector' => '{"merchant":"shop-a","merchant":"shop-b"}',
     'escaped duplicate selector' => '{"merchant":"shop-a","merch\\u0061nt":"shop-b"}',
 ]);

@@ -19,12 +19,14 @@ key privately. Never request, print, store, or pass a key in command arguments,
 headers, files, logs, or output. Do not read credential files to discover keys.
 
 Saved merchant access lives in `~/.config/quickpay-cli/config.json`. Names such
-as `shop-a` are local labels, not verified merchant IDs. `merchants:list` lists
+as `My Website` are local labels, not verified merchant IDs. `merchants:list` lists
 saved names; `merchants:select <name>` changes the global default;
 `merchants:select <name> --local` writes only the selection to `.quickpay-cli.json`
 in the current directory. `merchants:remove <name>` removes only local access,
-never the remote Quickpay account. Only change persistent selection when the
-user asks for it; prefer `--merchant=<name>` for one command.
+never the remote Quickpay account. Quote names with spaces, for example
+`quickpay merchants:add "My Website"`, and preserve their capitalization.
+Only change persistent selection when the user asks for it;
+prefer `--merchant=<name>` for one command.
 
 Use `quickpay merchants:active --check --json` to verify API access for the
 resolved credential. Add `--merchant=<name>` when working with a saved merchant,
@@ -58,9 +60,9 @@ Existing users add their merchants again; no automatic migration occurs.
 Safe capture example, only after inspection and explicit authorization:
 
 ```bash
-quickpay merchants:active --merchant=shop-a --check --json
-quickpay payments:get 884201 --merchant=shop-a --json
-quickpay payments:capture 884201 2500 --merchant=shop-a --yes --json
+quickpay merchants:active --merchant="My Website" --check --json
+quickpay payments:get 884201 --merchant="My Website" --json
+quickpay payments:capture 884201 2500 --merchant="My Website" --yes --json
 ```
 
 For a refund or cancellation, use the same inspect → verify → explicit authorization → execute sequence. If inspection is unavailable or the state/amount is wrong, stop and report it.

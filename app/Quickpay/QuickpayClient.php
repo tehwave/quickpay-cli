@@ -61,26 +61,6 @@ final readonly class QuickpayClient
      * @param  array<string, mixed>  $data
      * @param  array<string, string>  $headers
      */
-    public function patch(string $path, array $query = [], array $data = [], array $headers = []): QuickpayResponse
-    {
-        return $this->request('PATCH', $path, $query, $data, $headers);
-    }
-
-    /**
-     * @param  array<array-key, mixed>  $query
-     * @param  array<string, mixed>  $data
-     * @param  array<string, string>  $headers
-     */
-    public function delete(string $path, array $query = [], array $data = [], array $headers = []): QuickpayResponse
-    {
-        return $this->request('DELETE', $path, $query, $data, $headers);
-    }
-
-    /**
-     * @param  array<array-key, mixed>  $query
-     * @param  array<string, mixed>  $data
-     * @param  array<string, string>  $headers
-     */
     private function request(string $method, string $path, array $query = [], array $data = [], array $headers = []): QuickpayResponse
     {
         if (parse_url($path, PHP_URL_SCHEME) !== null || str_starts_with($path, '//')) {

@@ -12,7 +12,6 @@ use App\Quickpay\AuthenticatedQuickpayFactory;
 use App\Quickpay\Payments\PaymentMutation;
 use Illuminate\Console\OutputStyle;
 use InvalidArgumentException;
-use Symfony\Component\Console\Output\OutputInterface;
 
 /**
  * Executes payment mutations behind a shared inspect-and-confirm workflow.
@@ -134,17 +133,6 @@ abstract class AbstractPaymentMutationCommand extends AuthenticatedCommand
         }
 
         return ['QuickPay-Callback-Url' => $callback];
-    }
-
-    private function writeSafetyLine(string $message): void
-    {
-        // JSON mode reserves stdout for the response document. Human safety
-        // context and prompts therefore move to stderr.
-        $output = $this->option('json')
-            ? $this->getOutput()->getErrorStyle()
-            : $this->getOutput();
-
-        $output->writeln($message, OutputInterface::OUTPUT_RAW);
     }
 
     private function confirmMutation(): bool

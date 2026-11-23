@@ -17,24 +17,33 @@ final readonly class ApiKeyResolver
         if ($merchant !== null) {
             MerchantName::validate($merchant);
         }
+
         $environmentKey = $this->environment->get('QUICKPAY_API_KEY');
         if ($environmentKey !== null && $merchant !== null) {
             throw new CredentialException('Unset QUICKPAY_API_KEY before selecting a saved merchant.');
         }
-        $binding = $merchant === null ? $this->project->find() : null;
-        if ($environmentKey !== null && $binding !== null) {
+
+        $projectMerchant = $merchant === null ? $this->project->find() : null;
+        if ($environmentKey !== null && $projectMerchant !== null) {
             throw new CredentialException('Unset QUICKPAY_API_KEY before using a project merchant binding.');
         }
+
         if ($environmentKey !== null) {
             return new ApiKey($environmentKey, 'environment', null, 'environment');
         }
 
         $config = $this->store->read();
-        $source = $merchant !== null ? 'explicit' : ($binding !== null ? 'project' : 'default');
-        $name = $merchant ?? $binding['merchant'] ?? $config['default_merchant'];
+        $source = match (true) {
+            $merchant !== null => 'explicit',
+            $projectMerchant !== null => 'project',
+            default => 'default',
+        };
+        $name = $merchant ?? $projectMerchant ?? $config['default_merchant'];
+
         if ($name === null) {
             return null;
         }
+
         if (! isset($config['merchants'][$name])) {
             throw new CredentialException('Selected merchant is not saved. Run quickpay merchants:list to see saved names.');
         }

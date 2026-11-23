@@ -22,8 +22,8 @@ final class MerchantConfigurationJson
                 array_pop($objects);
             } elseif ($token[0] === '"' && ($tokens[$index + 1] ?? null) === ':') {
                 $name = json_decode($token, flags: JSON_THROW_ON_ERROR);
-                $scope = array_key_last($objects);
-                if (! is_string($name) || $scope === null || isset($objects[$scope][$name])) {
+                $scope = count($objects) - 1;
+                if (isset($objects[$scope][$name])) {
                     throw new JsonException('Ambiguous configuration contains duplicate JSON properties.');
                 }
                 $objects[$scope][$name] = true;

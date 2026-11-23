@@ -26,11 +26,11 @@ it('sends the required authentication version and json headers', function () {
     });
 });
 
-it('supports each required http method without retrying mutations', function (string $method) {
+it('supports each raw http method without retrying mutations', function (string $method) {
     Http::fake(['https://api.quickpay.net/resources*' => Http::response(['ok' => true])]);
 
     $client = new QuickpayClient(app(Factory::class), 'secret');
-    $response = $client->{strtolower($method)}('/resources', ['page' => 2], ['name' => 'Example']);
+    $response = $client->raw($method, '/resources', ['page' => 2], ['name' => 'Example']);
 
     expect($response->successful())->toBeTrue();
 
@@ -53,7 +53,7 @@ it('uses a thirty second request timeout', function () {
         ->and($requestOptions['timeout'] ?? null)->toBe(30);
 });
 
-it('does not retry a failed mutation', function (string $method) {
+it('does not retry a failed raw mutation', function (string $method) {
     $attempts = 0;
     Http::fake(function () use (&$attempts) {
         $attempts++;
@@ -63,7 +63,7 @@ it('does not retry a failed mutation', function (string $method) {
 
     $client = new QuickpayClient(app(Factory::class), 'secret');
 
-    expect(fn () => $client->{strtolower($method)}('/resources', data: ['name' => 'Example']))
+    expect(fn () => $client->raw($method, '/resources', data: ['name' => 'Example']))
         ->toThrow(QuickpayRequestException::class);
     expect($attempts)->toBe(1);
 })->with(['POST', 'PUT', 'PATCH', 'DELETE']);

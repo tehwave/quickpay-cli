@@ -18,6 +18,5 @@ final readonly class CallbackEnvelope
         public ?string $orderId,
         public string $body,
         public array $headers,
-        public ?string $operationId = null,
     ) {}
 }
