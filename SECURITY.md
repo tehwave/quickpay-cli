@@ -56,17 +56,14 @@ workflows stay attached to the same credential even if local configuration
 changes. Saved labels identify local configuration; actual merchant IDs come
 from Quickpay resources, when available.
 
-Each saved merchant also stores `read` and `write` flags. `QuickpayClient`
-refuses any request they block before sending it: `GET` is a read and every
-other method is a write. Capture, refund, cancel and raw mutations check the
-flags before inspecting a payment or asking for confirmation. The credential
-check behind `merchants:add` and `merchants:active --check` is exempt, because it
-reads no merchant data. Blocking works anywhere; allowing requests again, with
-`merchants:access` or `merchants:add --replace`, needs an interactive terminal
-and a confirmation. Flags are read when a command starts, so a running
-`callbacks:watch` keeps the access it started with. A key from `QUICKPAY_API_KEY` has
-full access. The flags are a local guardrail, not Quickpay permissions: anyone
-who can edit the configuration file can change them.
+Each saved merchant also stores a `write` flag. For a read-only merchant,
+`QuickpayClient` refuses every method except `GET` before sending it. Capture,
+refund, cancel and raw mutations check the flag before inspecting a payment or
+asking for confirmation. Making a merchant read-only works anywhere; allowing
+writes again, with `merchants:access` or `merchants:add --replace`, needs an
+interactive terminal and a confirmation. A key from `QUICKPAY_API_KEY` has full
+access. The flag is a local guardrail, not a Quickpay permission: anyone who can
+edit the configuration file can change it.
 
 ## Local callback forwarding
 

@@ -37,7 +37,6 @@ class ActiveMerchantCommand extends AuthenticatedCommand
             'selection_source' => $key?->selectionSource(),
             'credential_source' => $key?->source(),
             'configured' => $key !== null,
-            'read' => $key?->access()->read,
             'write' => $key?->access()->write,
             'checked' => $checkRequested,
             'authenticated' => $authenticated,
@@ -52,7 +51,7 @@ class ActiveMerchantCommand extends AuthenticatedCommand
             $this->line('Merchant: '.($status['merchant'] ?? ($key === null ? 'none' : 'not associated with a saved merchant')));
             $this->line('Selection source: '.($status['selection_source'] ?? 'none'));
             $this->line('Credential source: '.($status['credential_source'] ?? 'none'));
-            if ($key !== null && ! $key->access()->isFull()) {
+            if ($key !== null && ! $key->access()->write) {
                 $this->line('Access: '.$key->access()->label());
             }
             $this->line('Credentials configured: '.($status['configured'] ? 'yes' : 'no'));

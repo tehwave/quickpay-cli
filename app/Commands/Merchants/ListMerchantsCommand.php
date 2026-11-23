@@ -27,7 +27,6 @@ class ListMerchantsCommand extends BaseCommand
         $rows = array_map(fn (string $name): array => [
             'name' => $name,
             'default' => $config['default_merchant'] === $name,
-            'read' => $config['merchants'][$name]['read'],
             'write' => $config['merchants'][$name]['write'],
         ], $names);
 
@@ -36,20 +35,15 @@ class ListMerchantsCommand extends BaseCommand
         } elseif ($rows === []) {
             $this->line('No saved merchants. Run quickpay merchants:add <name> first.');
         } else {
-            // Access is shown only for merchants that block requests.
-            $restricted = array_map(function (array $row): ?string {
-                $access = new MerchantAccess($row['read'], $row['write']);
-
-                return $access->isFull() ? null : $access->label();
-            }, $rows);
-            $showAccess = array_filter($restricted) !== [];
+            // Access is shown only when a merchant is read-only.
+            $showAccess = in_array(false, array_column($rows, 'write'), true);
             $this->table(
                 ['Merchant', 'Global default', ...($showAccess ? ['Access'] : [])],
-                array_map(fn (array $row, ?string $access): array => [
+                array_map(fn (array $row): array => [
                     $row['name'],
                     $row['default'] ? 'yes' : '',
-                    ...($showAccess ? [$access ?? ''] : []),
-                ], $rows, $restricted),
+                    ...($showAccess ? [$row['write'] ? '' : (new MerchantAccess(false))->label()] : []),
+                ], $rows),
             );
         }
 

@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Named merchants. `merchants:add`, `merchants:list`, `merchants:select`, `merchants:active` and `merchants:remove` save and choose between several Quickpay merchants, and every authenticated command takes `--merchant`.
 - Project merchant bindings. `merchants:select <name> --local` writes `.quickpay-cli.json`, so commands in that folder and below use that merchant.
-- Read and write access flags for each saved merchant, set with `merchants:add --no-read` or `--no-write` and changed with `merchants:access`. Blocked requests fail before anything is sent.
+- Read-only merchants. `merchants:add --no-write` or `merchants:access --no-write` blocks every request except `GET` before anything is sent, and `merchants:access --write` allows writes again after a confirmation.
 - Payment mutations, payment creation, raw mutations and callback watching name the merchant they use.
 - `callbacks:watch` and `callbacks:replay` warn when `QUICKPAY_PRIVATE_KEY` is set while a saved merchant is selected.
 

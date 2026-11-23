@@ -13,7 +13,7 @@ final readonly class MerchantAuthenticationCheck
 
     public function check(ApiKey $apiKey): void
     {
-        $response = $this->quickpay->from($apiKey)->client->ping();
+        $response = $this->quickpay->from($apiKey)->client->get('/ping');
         if (! $response->successful()) {
             throw new QuickpayRequestException('Authentication check failed: '.ResponseBodySanitizer::terminalLine($response->errorSummary(), $apiKey->value()));
         }

@@ -7,7 +7,7 @@ it('removes only the named credential without choosing another default', functio
     $this->store->add('My Website', 'fake-secret-b');
     $this->artisan('merchants:remove', ['name' => 'My Other Website'])
         ->expectsOutputToContain('merchants:select')->assertExitCode(0);
-    expect($this->store->read())->toBe(['default_merchant' => null, 'merchants' => ['My Website' => ['api_key' => 'fake-secret-b', 'read' => true, 'write' => true]]]);
+    expect($this->store->read())->toBe(['default_merchant' => null, 'merchants' => ['My Website' => ['api_key' => 'fake-secret-b', 'write' => true]]]);
     $this->artisan('merchants:remove', ['name' => 'shop-missing'])->assertExitCode(1);
     $this->artisan('merchants:remove', ['name' => 'My Website'])->assertExitCode(0);
     expect($this->store->read()['merchants'])->toBe([]);

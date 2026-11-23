@@ -26,7 +26,6 @@ class AddMerchantCommand extends BaseCommand
     public function __construct()
     {
         parent::__construct();
-        $this->addOption('read', null, InputOption::VALUE_NEGATABLE, 'Allow read requests (GET). Allowed by default; --replace keeps the saved setting');
         $this->addOption('write', null, InputOption::VALUE_NEGATABLE, 'Allow write requests (POST, PUT, PATCH, DELETE). Allowed by default; --replace keeps the saved setting');
     }
 
@@ -51,17 +50,16 @@ class AddMerchantCommand extends BaseCommand
                 return $this->failure('Adding a merchant requires an interactive terminal. Use QUICKPAY_API_KEY for automation.');
             }
 
-            $read = $this->flag('read');
-            $write = $this->flag('write');
-            $lifting = [];
-            if ($saved) {
-                // A replacement keeps the saved flags, so lifting one of their
-                // blocks asks first, the same way merchants:access does.
-                $current = $config['merchants'][$name];
-                $lifting = (new MerchantAccess($current['read'], $current['write']))->lifts($read, $write);
-                $read = $read === true && ! in_array('read', $lifting, true) ? null : $read;
-                $write = $write === true && ! in_array('write', $lifting, true) ? null : $write;
-                if ($lifting !== [] && ! $this->confirm('Allow '.implode(' and ', $lifting).' requests for '.$name.'?', false)) {
+            $write = $this->option('write');
+            $write = is_bool($write) ? $write : null;
+            $lifting = false;
+            if ($saved && $write === true) {
+                // A replacement keeps the saved flag, so making a read-only
+                // merchant writable asks first, the same way merchants:access does.
+                // Allowing what is already allowed is dropped rather than saved.
+                $lifting = ! $config['merchants'][$name]['write'];
+                $write = $lifting ? true : null;
+                if ($lifting && ! $this->confirm('Allow write requests for '.$name.'?', false)) {
                     $this->line('Cancelled.');
 
                     return self::SUCCESS;
@@ -81,9 +79,9 @@ class AddMerchantCommand extends BaseCommand
             }
 
             $check->check($credential);
-            $access = $store->add($name, $apiKey, (bool) $this->option('replace'), $read, $write);
+            $access = $store->add($name, $apiKey, (bool) $this->option('replace'), $write);
             $this->info('Merchant saved: '.$name);
-            if (! $access->isFull() || $lifting !== []) {
+            if (! $access->write || $lifting) {
                 $this->line('Access: '.$access->label());
             }
 
@@ -99,12 +97,5 @@ class AddMerchantCommand extends BaseCommand
         } catch (CredentialException|QuickpayRequestException|UnexpectedValueException $exception) {
             return $this->failure($credential?->redact($exception->getMessage()) ?? $exception->getMessage());
         }
-    }
-
-    private function flag(string $name): ?bool
-    {
-        $value = $this->option($name);
-
-        return is_bool($value) ? $value : null;
     }
 }

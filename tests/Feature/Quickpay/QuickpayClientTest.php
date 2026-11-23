@@ -108,49 +108,26 @@ it('turns connection failures into a safe exception', function () {
     }
 });
 
-it('sends nothing when merchant access blocks the method', function (bool $read, bool $write, string $method, string $kind): void {
+it('sends no write request from a read-only merchant', function (string $method): void {
     Http::fake();
-    $client = new QuickpayClient(app(Factory::class), 'test-secret', new MerchantAccess($read, $write));
+    $client = new QuickpayClient(app(Factory::class), 'test-secret', new MerchantAccess(false));
 
     expect(fn () => $client->raw($method, '/payments/42', data: ['amount' => 1000]))
-        ->toThrow(MerchantAccessException::class, "does not allow {$kind} requests, so the ".strtoupper($method).' request was not sent.');
+        ->toThrow(MerchantAccessException::class, 'is read-only, so the '.strtoupper($method).' request was not sent.');
     Http::assertNothingSent();
-})->with([
-    'read-only POST' => [true, false, 'POST', 'write'],
-    'read-only PUT' => [true, false, 'PUT', 'write'],
-    'read-only PATCH' => [true, false, 'PATCH', 'write'],
-    'read-only DELETE' => [true, false, 'delete', 'write'],
-    'write-only GET' => [false, true, 'GET', 'read'],
-    'no access GET' => [false, false, 'GET', 'read'],
-    'no access POST' => [false, false, 'POST', 'write'],
-]);
+})->with(['POST', 'PUT', 'PATCH', 'delete']);
 
-it('applies merchant access to first-class requests', function (): void {
+it('applies write protection to first-class requests', function (): void {
     Http::fake(['https://api.quickpay.net/payments*' => Http::response(['id' => 42])]);
-    $readOnly = new QuickpayClient(app(Factory::class), 'test-secret', new MerchantAccess(true, false));
-    $writeOnly = new QuickpayClient(app(Factory::class), 'test-secret', new MerchantAccess(false, true));
+    $readOnly = new QuickpayClient(app(Factory::class), 'test-secret', new MerchantAccess(false));
 
     expect($readOnly->get('/payments/42')->successful())->toBeTrue()
+        ->and($readOnly->raw('GET', '/payments/42')->successful())->toBeTrue()
         ->and(fn () => $readOnly->post('/payments'))->toThrow(MerchantAccessException::class)
-        ->and(fn () => $readOnly->put('/payments/42/link'))->toThrow(MerchantAccessException::class)
-        ->and($writeOnly->post('/payments')->successful())->toBeTrue()
-        ->and(fn () => $writeOnly->get('/payments/42'))->toThrow(MerchantAccessException::class);
+        ->and(fn () => $readOnly->put('/payments/42/link'))->toThrow(MerchantAccessException::class);
     expect(Http::recorded())->toHaveCount(2)
         ->and(Http::recorded()[0][0]->method())->toBe('GET')
-        ->and(Http::recorded()[1][0]->method())->toBe('POST');
-});
-
-it('checks credentials with ping even when merchant access blocks every request', function (): void {
-    Http::fake(['https://api.quickpay.net/ping' => Http::response(['scope' => 'merchant'])]);
-    $client = new QuickpayClient(app(Factory::class), 'test-secret', new MerchantAccess(false, false));
-
-    expect($client->ping()->successful())->toBeTrue()
-        ->and(fn () => $client->get('/ping'))->toThrow(MerchantAccessException::class)
-        ->and(fn () => $client->raw('GET', '/ping'))->toThrow(MerchantAccessException::class);
-    Http::assertSentCount(1);
-    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
-        && $request->url() === 'https://api.quickpay.net/ping'
-        && $request->header('Authorization') === ['Basic '.base64_encode(':test-secret')]);
+        ->and(Http::recorded()[1][0]->method())->toBe('GET');
 });
 
 it('never treats blocked access as a retryable request failure', function (): void {

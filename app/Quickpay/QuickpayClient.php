@@ -14,8 +14,8 @@ use InvalidArgumentException;
  * Owns every HTTP invariant required by the Quickpay API boundary.
  *
  * Callers provide relative paths and business payloads only. Authentication,
- * origin, API version, JSON headers, timeout, and the merchant's read and write
- * access remain centralized so raw API access cannot weaken the same guarantees
+ * origin, API version, JSON headers, timeout, and the merchant's write
+ * protection remain centralized so raw API access cannot weaken the same guarantees
  * used by first-class commands.
  */
 final readonly class QuickpayClient
@@ -31,7 +31,7 @@ final readonly class QuickpayClient
     ) {}
 
     /**
-     * Fails before any request the merchant's access flags do not allow.
+     * Fails before a write request from a read-only merchant.
      *
      * Commands that inspect or confirm before mutating call this first, so a
      * blocked mutation never fetches state or asks for confirmation.
@@ -43,17 +43,6 @@ final readonly class QuickpayClient
         if (! $this->access->allows($method)) {
             throw MerchantAccessException::blocked($method);
         }
-    }
-
-    /**
-     * Verifies the credential itself.
-     *
-     * It is exempt from the access flags because it reads no merchant data, so
-     * a merchant that blocks reads can still be checked.
-     */
-    public function ping(): QuickpayResponse
-    {
-        return $this->send('GET', '/ping');
     }
 
     /**
