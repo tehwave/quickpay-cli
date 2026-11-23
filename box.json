@@ -3,19 +3,27 @@
     "directories": [
         "app",
         "bootstrap",
-        "config",
-        "vendor"
+        "config"
     ],
     "files": [
         "composer.json"
     ],
     "exclude-composer-files": false,
-    "dump-autoload": false,
+    "dump-autoload": true,
     "exclude-dev-files": false,
     "check-requirements": true,
     "output": "quickpay.phar",
     "compression": "GZ",
     "compactors": [
         "KevinGH\\Box\\Compactor\\Php"
+    ],
+    "finder": [
+        {
+            "in": "vendor",
+            "exclude": [
+                "phpstan/phpstan",
+                "larastan/larastan"
+            ]
+        }
     ]
 }
