@@ -3,6 +3,12 @@
 Packagist installs the committed `builds/quickpay` PHAR. A release is built
 once, reviewed by `Quality`, committed, tagged, and published manually.
 
+The PHAR bundles every package in `vendor/`, development packages included,
+because `laravel-zero/framework` is a development dependency that the PHAR runs
+on. `box.json` leaves out PHPStan and Larastan, which would otherwise make up
+most of the PHAR. Leave out any large development tool added later in the same
+place, and check the PHAR's size after building.
+
 ## One-time setup
 
 - Connect the GitHub repository to Packagist.
