@@ -2,16 +2,12 @@
 
 namespace App\Credentials;
 
-use App\Console\Output\ResponseBodySanitizer;
 use App\Credentials\Exceptions\CredentialException;
-use App\Credentials\Redaction\CredentialRedactor;
 use Closure;
 use JsonException;
-use stdClass;
 
 /**
- * @phpstan-type SavedMerchant array{api_key: string, read_only: bool}
- * @phpstan-type MerchantConfig array{default_merchant: ?string, merchants: array<string, SavedMerchant>}
+ * @phpstan-import-type MerchantConfig from MerchantConfigurationParser
  */
 final readonly class MerchantStore
 {
@@ -78,52 +74,7 @@ final readonly class MerchantStore
             throw new CredentialException('Quickpay CLI merchant configuration cannot be read.');
         }
 
-        try {
-            $config = MerchantConfigurationJson::decode($contents);
-        } catch (JsonException) {
-            throw new CredentialException('Quickpay CLI merchant configuration is invalid JSON or repeats a property.');
-        }
-
-        if ($config instanceof stdClass && property_exists($config, 'api_key')) {
-            $location = ResponseBodySanitizer::terminalLine($path, '');
-
-            throw new CredentialException("Quickpay CLI merchant configuration {$location} uses the unsupported single-key format. Remove that file, then add merchants again with quickpay merchants:add <name>.");
-        }
-
-        if (! $config instanceof stdClass
-            || count(get_object_vars($config)) !== 2
-            || ! property_exists($config, 'default_merchant')
-            || ! ($config->merchants ?? null) instanceof stdClass
-            || ($config->default_merchant !== null && ! is_string($config->default_merchant))) {
-            throw new CredentialException('Quickpay CLI merchant configuration has an invalid structure.');
-        }
-
-        $merchants = [];
-        foreach (get_object_vars($config->merchants) as $name => $merchant) {
-            try {
-                MerchantName::validate((string) $name);
-            } catch (CredentialException $exception) {
-                $location = ResponseBodySanitizer::terminalLine($path, '');
-
-                throw new CredentialException("Quickpay CLI merchant configuration {$location} contains an invalid merchant name. {$exception->getMessage()}");
-            }
-            if (! $merchant instanceof stdClass
-                || ! is_string($merchant->api_key ?? null)
-                || trim($merchant->api_key) === '') {
-                throw new CredentialException('Quickpay CLI merchant configuration contains an invalid credential.');
-            }
-            if (count(get_object_vars($merchant)) !== 2 || ! is_bool($merchant->read_only ?? null)) {
-                throw new CredentialException('Quickpay CLI merchant configuration needs exactly an API key and a true or false read_only flag for each merchant.');
-            }
-            $merchants[$name] = ['api_key' => $merchant->api_key, 'read_only' => $merchant->read_only];
-        }
-        $this->validateLabels($merchants);
-
-        if ($config->default_merchant !== null && ! isset($merchants[$config->default_merchant])) {
-            throw new CredentialException('Quickpay CLI default merchant is not saved.');
-        }
-
-        return ['default_merchant' => $config->default_merchant, 'merchants' => $merchants];
+        return MerchantConfigurationParser::parse($contents, $path);
     }
 
     /**
@@ -138,31 +89,42 @@ final readonly class MerchantStore
         if ($apiKey === '') {
             throw new CredentialException('API key cannot be empty.');
         }
-        $access = null;
-        $this->mutate(function (array $config) use ($name, $apiKey, $replace, $readOnly, &$access): array {
-            if (isset($config['merchants'][$name]) && ! $replace) {
-                throw new CredentialException('Merchant is already saved. Use --replace to replace its credential.');
-            }
-            if (! isset($config['merchants'][$name]) && $replace) {
-                throw new CredentialException('Merchant is not saved, so there is no credential to replace. Run quickpay merchants:list to see saved names.');
-            }
-            $variant = MerchantName::caseVariant($name, array_keys($config['merchants']));
-            if (! isset($config['merchants'][$name]) && $variant !== null) {
-                throw new CredentialException("Merchant {$variant} is already saved with different capitalization. Use that name, or choose a clearly different one.");
-            }
+        $config = $this->mutate(function (array $config) use ($name, $apiKey, $replace, $readOnly): array {
+            self::assertCanAdd($config, $name, $replace);
             if ($config['merchants'] === []) {
                 $config['default_merchant'] = $name;
             }
             $existing = $config['merchants'][$name] ?? null;
-            $access = new MerchantAccess($readOnly || ($existing['read_only'] ?? false));
-            $config['merchants'][$name] = ['api_key' => $apiKey, 'read_only' => $access->readOnly];
-            $this->validateLabels($config['merchants']);
+            $config['merchants'][$name] = ['api_key' => $apiKey, 'read_only' => $readOnly || ($existing['read_only'] ?? false)];
+            MerchantConfigurationParser::validateLabels($config['merchants']);
 
             return $config;
         });
 
-        /** @var MerchantAccess $access */
-        return $access;
+        return new MerchantAccess($config['merchants'][$name]['read_only']);
+    }
+
+    /**
+     * Fails when $name cannot be added to $config, or replaced in it.
+     *
+     * merchants:add calls this before asking for the key, and add() calls it
+     * again under the lock in case the file changed in between.
+     *
+     * @param  MerchantConfig  $config
+     */
+    public static function assertCanAdd(array $config, string $name, bool $replace): void
+    {
+        $saved = isset($config['merchants'][$name]);
+        if ($saved && ! $replace) {
+            throw new CredentialException('Merchant is already saved. Use --replace to replace its credential.');
+        }
+        if (! $saved && $replace) {
+            throw new CredentialException('Merchant is not saved, so there is no credential to replace. Run quickpay merchants:list to see saved names.');
+        }
+        $variant = MerchantName::caseVariant($name, array_keys($config['merchants']));
+        if (! $saved && $variant !== null) {
+            throw new CredentialException("Merchant {$variant} is already saved with different capitalization. Use that name, or choose a clearly different one.");
+        }
     }
 
     public function select(string $name): void
@@ -179,17 +141,14 @@ final readonly class MerchantStore
     public function changeAccess(string $name, bool $readOnly): MerchantAccess
     {
         MerchantName::validate($name);
-        $access = null;
-        $this->mutate(function (array $config) use ($name, $readOnly, &$access): array {
+        $this->mutate(function (array $config) use ($name, $readOnly): array {
             $this->requireMerchant($config, $name);
-            $access = new MerchantAccess($readOnly);
             $config['merchants'][$name] = [...$config['merchants'][$name], 'read_only' => $readOnly];
 
             return $config;
         });
 
-        /** @var MerchantAccess $access */
-        return $access;
+        return new MerchantAccess($readOnly);
     }
 
     public function remove(string $name): void
@@ -205,19 +164,6 @@ final readonly class MerchantStore
         });
     }
 
-    /** @param array<string, SavedMerchant> $merchants */
-    private function validateLabels(array $merchants): void
-    {
-        // ponytail: quadratic check for the small registry; cache a multi-key matcher if large registries become common.
-        foreach (array_keys($merchants) as $name) {
-            foreach ($merchants as $credential) {
-                if (CredentialRedactor::containsSensitiveValue($name, $credential['api_key'])) {
-                    throw new CredentialException('Merchant name must not contain the API key.');
-                }
-            }
-        }
-    }
-
     /** @param MerchantConfig $config */
     private function requireMerchant(array $config, string $name): void
     {
@@ -226,8 +172,13 @@ final readonly class MerchantStore
         }
     }
 
-    /** @param Closure(MerchantConfig): MerchantConfig $change */
-    private function mutate(Closure $change): void
+    /**
+     * Applies $change to the configuration under the lock and saves it.
+     *
+     * @param  Closure(MerchantConfig): MerchantConfig  $change
+     * @return MerchantConfig the configuration as saved
+     */
+    private function mutate(Closure $change): array
     {
         $file = $this->path();
         $directory = dirname($file);
@@ -260,6 +211,8 @@ final readonly class MerchantStore
                 throw new CredentialException('Unable to store merchant credentials atomically.');
             }
             $temporary = '';
+
+            return $config;
         } catch (JsonException) {
             throw new CredentialException('Unable to encode merchant credentials.');
         } finally {

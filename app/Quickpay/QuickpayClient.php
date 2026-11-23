@@ -84,13 +84,7 @@ final readonly class QuickpayClient
     {
         $this->authorize($method);
 
-        if (parse_url($path, PHP_URL_SCHEME) !== null || str_starts_with($path, '//')) {
-            throw new InvalidArgumentException('Quickpay request paths must be relative.');
-        }
-
-        $url = '/'.ltrim($path, '/');
-
-        return $this->send($method, $url, $query, $data, $headers);
+        return $this->send($method, $this->relativePath($path), $query, $data, $headers);
     }
 
     /**
@@ -107,11 +101,17 @@ final readonly class QuickpayClient
     ): QuickpayResponse {
         $this->authorize($method);
 
+        return $this->send($method, $this->relativePath($path), $query, $data, $headers, $hasData);
+    }
+
+    /** Keeps every request on the Quickpay host: absolute and protocol-relative URLs are refused. */
+    private function relativePath(string $path): string
+    {
         if (parse_url($path, PHP_URL_SCHEME) !== null || str_starts_with($path, '//')) {
             throw new InvalidArgumentException('Quickpay request paths must be relative.');
         }
 
-        return $this->send($method, '/'.ltrim($path, '/'), $query, $data, $headers, $hasData);
+        return '/'.ltrim($path, '/');
     }
 
     /**

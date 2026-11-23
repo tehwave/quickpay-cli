@@ -32,19 +32,9 @@ class AddMerchantCommand extends BaseCommand
             $name = MerchantName::validate((string) $this->argument('name'));
             $config = $store->read();
 
-            $saved = isset($config['merchants'][$name]);
-            if ($saved && ! $this->option('replace')) {
-                return $this->failure('Merchant is already saved. Use --replace to replace its credential.');
-            }
-
-            if (! $saved && $this->option('replace')) {
-                return $this->failure('Merchant is not saved, so there is no credential to replace. Run quickpay merchants:list to see saved names.');
-            }
-
-            $variant = MerchantName::caseVariant($name, array_keys($config['merchants']));
-            if (! $saved && $variant !== null) {
-                return $this->failure("Merchant {$variant} is already saved with different capitalization. Use that name, or choose a clearly different one.");
-            }
+            // Checked again under the store lock; checking first means a name
+            // that cannot be added fails before the key is asked for.
+            MerchantStore::assertCanAdd($config, $name, (bool) $this->option('replace'));
 
             if (! $this->input->isInteractive() || ! $terminal->isTty()) {
                 return $this->failure('Adding a merchant requires an interactive terminal. Use QUICKPAY_API_KEY for automation.');

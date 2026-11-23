@@ -10,6 +10,7 @@ use App\Quickpay\AuthenticatedQuickpayFactory;
 use App\Quickpay\Exceptions\QuickpayRequestException;
 use App\Quickpay\QuickpayResponse;
 use Closure;
+use Illuminate\Console\OutputStyle;
 use InvalidArgumentException;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -62,12 +63,37 @@ abstract class AuthenticatedCommand extends BaseCommand
         }
     }
 
+    /**
+     * Asks before a mutation. With --json the prompt goes to stderr, so stdout
+     * stays machine-readable.
+     */
+    protected function confirmMutation(): bool
+    {
+        if (! $this->jsonOutput()) {
+            return $this->confirm('Continue?');
+        }
+
+        $output = $this->output;
+        $this->output = new OutputStyle($this->input, $output->getErrorStyle());
+
+        try {
+            return $this->confirm('Continue?');
+        } finally {
+            $this->output = $output;
+        }
+    }
+
     protected function writeSafetyLine(string $message): void
     {
-        $output = $this->input->hasOption('json') && $this->input->getOption('json')
+        $output = $this->jsonOutput()
             ? $this->getOutput()->getErrorStyle()
             : $this->getOutput();
 
         $output->writeln($message, OutputInterface::OUTPUT_RAW);
+    }
+
+    private function jsonOutput(): bool
+    {
+        return $this->input->hasOption('json') && (bool) $this->input->getOption('json');
     }
 }

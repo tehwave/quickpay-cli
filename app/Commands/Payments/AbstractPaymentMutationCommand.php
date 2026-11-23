@@ -10,7 +10,6 @@ use App\Console\Output\ResponseBodySanitizer;
 use App\Quickpay\AuthenticatedQuickpay;
 use App\Quickpay\AuthenticatedQuickpayFactory;
 use App\Quickpay\Payments\PaymentMutation;
-use Illuminate\Console\OutputStyle;
 use InvalidArgumentException;
 
 /**
@@ -137,21 +136,5 @@ abstract class AbstractPaymentMutationCommand extends AuthenticatedCommand
         }
 
         return ['QuickPay-Callback-Url' => $callback];
-    }
-
-    private function confirmMutation(): bool
-    {
-        if (! $this->option('json')) {
-            return $this->confirm('Continue?');
-        }
-
-        $output = $this->output;
-        $this->output = new OutputStyle($this->input, $output->getErrorStyle());
-
-        try {
-            return $this->confirm('Continue?');
-        } finally {
-            $this->output = $output;
-        }
     }
 }
