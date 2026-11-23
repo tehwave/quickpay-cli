@@ -47,6 +47,16 @@ it('retains existing credentials on duplicate or invalid additions', function (s
     expect(file_get_contents($this->path))->toBe($before);
 })->with(['duplicate' => ['shop-a', 'fake-new'], 'empty key' => ['shop-b', ' '], 'secret label' => ['secret-name', 'secret']]);
 
+it('rejects a new name that differs from a saved one only in capitalization', function (): void {
+    $store = new MerchantStore($this->path);
+    $store->add('My Website', 'fake-original');
+    $before = file_get_contents($this->path);
+    expect(fn () => $store->add('my website', 'fake-new'))->toThrow(CredentialException::class, 'different capitalization');
+    expect(file_get_contents($this->path))->toBe($before);
+    $store->add('My Website', 'fake-replacement', true);
+    expect($store->read()['merchants']['My Website']['api_key'])->toBe('fake-replacement');
+});
+
 it('does not treat a replacement of an unsaved merchant as an addition', function (): void {
     $store = new MerchantStore($this->path);
     $store->add('shop-a', 'fake-original');

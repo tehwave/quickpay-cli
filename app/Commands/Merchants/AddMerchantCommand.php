@@ -6,6 +6,7 @@ use App\Console\BaseCommand;
 use App\Console\Output\ResponseBodySanitizer;
 use App\Console\Terminal\StdinTerminalDetector;
 use App\Credentials\ApiKey;
+use App\Credentials\EnvironmentVariables;
 use App\Credentials\Exceptions\CredentialException;
 use App\Credentials\MerchantAccess;
 use App\Credentials\MerchantName;
@@ -23,7 +24,7 @@ class AddMerchantCommand extends BaseCommand
 
     protected $description = 'Validate and save API access to an existing Quickpay merchant';
 
-    public function handle(MerchantStore $store, MerchantAuthenticationCheck $check, StdinTerminalDetector $terminal): int
+    public function handle(MerchantStore $store, MerchantAuthenticationCheck $check, StdinTerminalDetector $terminal, EnvironmentVariables $environment): int
     {
         $credential = null;
 
@@ -38,6 +39,11 @@ class AddMerchantCommand extends BaseCommand
 
             if (! $saved && $this->option('replace')) {
                 return $this->failure('Merchant is not saved, so there is no credential to replace. Run quickpay merchants:list to see saved names.');
+            }
+
+            $variant = MerchantName::caseVariant($name, array_keys($config['merchants']));
+            if (! $saved && $variant !== null) {
+                return $this->failure("Merchant {$variant} is already saved with different capitalization. Use that name, or choose a clearly different one.");
             }
 
             if (! $this->input->isInteractive() || ! $terminal->isTty()) {
@@ -61,6 +67,10 @@ class AddMerchantCommand extends BaseCommand
             $this->info('Merchant saved: '.$name);
             if ($access->readOnly) {
                 $this->line('Access: '.$access->label());
+            }
+
+            if ($environment->get('QUICKPAY_API_KEY') !== null) {
+                $this->comment('QUICKPAY_API_KEY is set, so commands use it instead of saved merchants until you unset it.');
             }
 
             $legacy = $store->leftoverLegacyCredential();

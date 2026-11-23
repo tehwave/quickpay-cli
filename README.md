@@ -53,6 +53,8 @@ To use a different merchant for a project, run
 `quickpay merchants:select "My Website" --local` from the project folder. Commands in
 that folder and its subfolders will use **My Website** instead of your default merchant.
 You can still choose another merchant for a single command with `--merchant`.
+The `.quickpay-cli.json` file holds only the merchant name, never a key. Add it to
+`.gitignore` when the choice is yours alone.
 
 For scripts and CI, you can supply the API key through `QUICKPAY_API_KEY`
 instead of saving a merchant. Use it outside folders with a project merchant
@@ -71,10 +73,10 @@ quickpay merchants:access "My Website" --read-write
 ```
 
 A blocked request stops before anything reaches Quickpay. Replacing the key with
-`merchants:add --replace` keeps the merchant read-only. `--read-write` asks you to
-confirm in an interactive terminal, so a script or agent can't lift the
-protection on its own.
-A key in `QUICKPAY_API_KEY` always has full access.
+`merchants:add --replace` keeps the merchant read-only, but removing it and adding
+it again saves it with full access unless you pass `--read-only`. `--read-write`
+asks you to confirm in an interactive terminal, so a script or agent can't lift
+the protection on its own. A key in `QUICKPAY_API_KEY` always has full access.
 
 ## Payments
 
@@ -118,6 +120,10 @@ Install the bundled [quickpay-cli skill](skills/quickpay-cli/SKILL.md):
 ```bash
 skills add tehwave/quickpay-cli
 ```
+
+If you installed the earlier `quickpay` skill, remove its folder from your agent's
+skills directory first, so your agent stops using the removed `login` and `auth`
+commands.
 
 ## Contributing
 

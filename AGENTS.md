@@ -84,7 +84,8 @@ validation, and the locked-dependency audit.
 - Saved merchants carry a `read_only` flag that `QuickpayClient` enforces before
   sending: a read-only merchant may send only `GET`. Commands that inspect or
   confirm before mutating check it first. Only `merchants:access --read-write`
-  lifts it, in an interactive terminal; `QUICKPAY_API_KEY` has full access.
+  lifts it, in an interactive terminal (removing and re-adding the merchant also
+  needs the key typed interactively); `QUICKPAY_API_KEY` has full access.
 - Resolve credentials once per command, including long-running watchers. Plain
   `merchants:active` is local status; `--check` verifies merchant API access.
 - The client owns the Quickpay host, authentication, API version, and JSON

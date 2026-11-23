@@ -43,6 +43,20 @@ it('selects a project merchant without changing the global default', function ()
     Http::assertNothingSent();
 });
 
+it('says when a project binding still outranks the new global default', function (): void {
+    $this->store->add('shop-a', 'fake-secret-a');
+    $this->store->add('shop-b', 'fake-secret-b');
+    $this->artisan('merchants:select', ['name' => 'shop-a', '--local' => true])->assertExitCode(0);
+    $this->artisan('merchants:select', ['name' => 'shop-b'])
+        ->expectsOutputToContain('Global default merchant selected: shop-b')
+        ->expectsOutputToContain('Commands in this folder still use shop-a from the nearest .quickpay-cli.json.')
+        ->assertExitCode(0);
+    $this->artisan('merchants:select', ['name' => 'shop-a'])
+        ->doesntExpectOutputToContain('still use')
+        ->assertExitCode(0);
+    Http::assertNothingSent();
+});
+
 it('rejects environment overrides before changing selection', function (bool $named): void {
     $this->store->add('shop-a', 'fake-secret-a');
     putenv('QUICKPAY_API_KEY=fake-environment');

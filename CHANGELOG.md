@@ -16,7 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- The bundled agent skill is renamed from `quickpay` to `quickpay-cli`.
+- The bundled agent skill is renamed from `quickpay` to `quickpay-cli`. Remove the old `quickpay` skill folder from your agent's skills directory, then run `skills add tehwave/quickpay-cli`.
 
 ### Removed
 

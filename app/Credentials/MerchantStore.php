@@ -58,7 +58,7 @@ final readonly class MerchantStore
         try {
             $config = MerchantConfigurationJson::decode($contents);
         } catch (JsonException) {
-            throw new CredentialException('Quickpay CLI merchant configuration is invalid JSON.');
+            throw new CredentialException('Quickpay CLI merchant configuration is invalid JSON or repeats a property.');
         }
 
         if ($config instanceof stdClass && property_exists($config, 'api_key')) {
@@ -114,6 +114,10 @@ final readonly class MerchantStore
             }
             if (! isset($config['merchants'][$name]) && $replace) {
                 throw new CredentialException('Merchant is not saved, so there is no credential to replace. Run quickpay merchants:list to see saved names.');
+            }
+            $variant = MerchantName::caseVariant($name, array_keys($config['merchants']));
+            if (! isset($config['merchants'][$name]) && $variant !== null) {
+                throw new CredentialException("Merchant {$variant} is already saved with different capitalization. Use that name, or choose a clearly different one.");
             }
             if ($config['merchants'] === []) {
                 $config['default_merchant'] = $name;

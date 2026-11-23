@@ -18,6 +18,20 @@ it('adds a merchant after a private credential check', function (): void {
         && $request->method() === 'GET' && $request->header('Authorization') === ['Basic '.base64_encode(':fake-secret-a')]);
 });
 
+it('says when QUICKPAY_API_KEY still takes precedence over the saved merchant', function (bool $environment): void {
+    Http::fake(['https://api.quickpay.net/ping' => Http::response(['scope' => 'merchant'])]);
+    if ($environment) {
+        putenv('QUICKPAY_API_KEY=fake-environment');
+    }
+    $command = $this->artisan('merchants:add', ['name' => 'My Website'])
+        ->expectsQuestion('API key', 'fake-secret-a')
+        ->expectsOutputToContain('Merchant saved: My Website');
+    $environment
+        ? $command->expectsOutputToContain('QUICKPAY_API_KEY is set')
+        : $command->doesntExpectOutputToContain('QUICKPAY_API_KEY');
+    $command->doesntExpectOutputToContain('fake-environment')->assertExitCode(0);
+})->with(['environment key' => true, 'no environment key' => false]);
+
 it('tells upgraders that the old credential file is unused without reading it', function (): void {
     Http::fake(['https://api.quickpay.net/ping' => Http::response(['scope' => 'merchant'])]);
     $legacy = $this->tempDirectory.'/legacy-config.json';
@@ -36,7 +50,7 @@ it('rejects duplicate and invalid names before prompting', function (string $nam
     $this->artisan('merchants:add', ['name' => $name])->assertExitCode(1);
     Http::assertNothingSent();
     expect(file_get_contents($this->store->path()))->toBe($before);
-})->with(['duplicate' => 'shop-a', 'path' => '../secret', 'leading space' => ' My Website']);
+})->with(['duplicate' => 'shop-a', 'case variant' => 'Shop-A', 'path' => '../secret', 'leading space' => ' My Website']);
 
 it('replaces a credential only after successful validation', function (): void {
     Http::fake(['https://api.quickpay.net/ping' => Http::response(['msg' => 'pong', 'scope' => 'merchant', 'version' => 'v10', 'params' => []])]);

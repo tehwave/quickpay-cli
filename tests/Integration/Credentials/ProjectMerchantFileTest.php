@@ -45,11 +45,35 @@ it('rejects malformed nearest bindings without falling back or overwriting', fun
     'escaped duplicate selector' => '{"merchant":"shop-a","merch\\u0061nt":"shop-b"}',
 ]);
 
+it('names a repeated property as the possible cause of an unreadable binding', function (): void {
+    file_put_contents($this->tempDirectory.'/.quickpay-cli.json', '{"merchant":"shop-a","merchant":"shop-b"}');
+    expect(fn () => (new ProjectMerchantFile($this->tempDirectory))->find())
+        ->toThrow(CredentialException::class, 'repeats a property');
+});
+
 it('rejects an ancestor binding owned by another user', function (): void {
     (new ProjectMerchantFile($this->tempDirectory))->save('shop-a');
     $otherUser = fileowner($this->tempDirectory.'/.quickpay-cli.json') + 1;
     expect(fn () => (new ProjectMerchantFile($this->tempDirectory.'/nested', $otherUser))->find())
         ->toThrow(CredentialException::class, 'not owned by the current user');
+});
+
+it('rejects a binding symlink owned by another user even when its target matches', function (): void {
+    // A root-owned target stands in for "this user's file": the link itself is
+    // owned by the test user, so only an lstat owner check can reject it.
+    $target = '/etc/hosts';
+    symlink($target, $this->tempDirectory.'/.quickpay-cli.json');
+    expect(fn () => (new ProjectMerchantFile($this->tempDirectory.'/nested', fileowner($target)))->find())
+        ->toThrow(CredentialException::class, 'not owned by the current user');
+})->skip(fn (): bool => ! is_file('/etc/hosts')
+    || ! function_exists('posix_geteuid')
+    || fileowner('/etc/hosts') === posix_geteuid(), 'needs a readable file owned by another user');
+
+it('accepts a binding symlink owned by the current user', function (): void {
+    mkdir($this->tempDirectory.'/real');
+    (new ProjectMerchantFile($this->tempDirectory.'/real'))->save('shop-a');
+    symlink($this->tempDirectory.'/real/.quickpay-cli.json', $this->tempDirectory.'/.quickpay-cli.json');
+    expect((new ProjectMerchantFile($this->tempDirectory.'/nested'))->find())->toBe('shop-a');
 });
 
 it('rejects a directory masquerading as a project file', function (): void {

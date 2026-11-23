@@ -14,4 +14,23 @@ final class MerchantName
 
         return $name;
     }
+
+    /**
+     * Returns a saved name that differs from $name only in capitalization.
+     *
+     * Names match exactly, so "Shop" and "shop" would be two merchants that a
+     * mistyped --merchant silently confuses. A new name must not shadow one.
+     *
+     * @param  array<int, string>  $saved
+     */
+    public static function caseVariant(string $name, array $saved): ?string
+    {
+        foreach ($saved as $existing) {
+            if ($existing !== $name && strcasecmp($existing, $name) === 0) {
+                return $existing;
+            }
+        }
+
+        return null;
+    }
 }

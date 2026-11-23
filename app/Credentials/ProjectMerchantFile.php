@@ -75,14 +75,17 @@ final readonly class ProjectMerchantFile
         }
         // Upward discovery reaches shared directories such as /tmp. Another
         // user's binding must not steer which saved merchant this user runs.
+        // fileowner() follows symlinks, so a link another user planted to one
+        // of this user's bindings is checked by its own owner as well.
         $owner = $this->owner ?? (function_exists('posix_geteuid') ? posix_geteuid() : null);
-        if ($owner !== null && @fileowner($path) !== $owner) {
+        $link = is_link($path) ? @lstat($path) : null;
+        if ($owner !== null && (@fileowner($path) !== $owner || ($link !== null && ($link === false || $link['uid'] !== $owner)))) {
             throw new CredentialException("Project merchant binding {$location} is not owned by the current user.");
         }
         try {
             $config = MerchantConfigurationJson::decode($contents);
         } catch (JsonException) {
-            throw new CredentialException("Project merchant binding {$location} is invalid JSON.");
+            throw new CredentialException("Project merchant binding {$location} is invalid JSON or repeats a property.");
         }
         if (! $config instanceof stdClass || count(get_object_vars($config)) !== 1 || ! is_string($config->merchant ?? null)) {
             throw new CredentialException("Project merchant binding {$location} must contain only a merchant name.");

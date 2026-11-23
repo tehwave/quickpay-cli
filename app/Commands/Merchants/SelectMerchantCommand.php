@@ -61,11 +61,31 @@ class SelectMerchantCommand extends BaseCommand
             } else {
                 $store->select($name);
                 $this->info('Global default merchant selected: '.$name);
+                $this->explainProjectOverride($project, $name);
             }
 
             return self::SUCCESS;
         } catch (CredentialException $exception) {
             return $this->failure($exception->getMessage());
+        }
+    }
+
+    /**
+     * A project binding outranks the global default, so the new default does
+     * not apply here. Say so rather than imply it is now in use.
+     */
+    private function explainProjectOverride(ProjectMerchantFile $project, string $name): void
+    {
+        try {
+            $bound = $project->find();
+        } catch (CredentialException) {
+            // The default is already saved. Commands here report the binding's
+            // problem themselves, so this notice is best effort.
+            return;
+        }
+
+        if ($bound !== null && $bound !== $name) {
+            $this->comment("Commands in this folder still use {$bound} from the nearest .quickpay-cli.json.");
         }
     }
 }

@@ -60,10 +60,12 @@ Each saved merchant also stores a `read_only` flag. For a read-only merchant,
 `QuickpayClient` refuses every method except `GET` before sending it. Capture,
 refund, cancel and raw mutations check the flag before inspecting a payment or
 asking for confirmation. Making a merchant read-only works anywhere, and
-`merchants:add --replace` keeps it read-only. Only `merchants:access --read-write`
-allows writes again, and it needs an interactive terminal and a confirmation. A key from `QUICKPAY_API_KEY` has full
-access. The flag is a local guardrail, not a Quickpay permission: anyone who can
-edit the configuration file can change it.
+`merchants:add --replace` keeps it read-only. Writes are allowed again only by
+`merchants:access --read-write`, which needs an interactive terminal and a
+confirmation, or by removing the merchant and adding it again without
+`--read-only`, which needs its API key typed into an interactive terminal. A key
+from `QUICKPAY_API_KEY` has full access. The flag is a local guardrail, not a
+Quickpay permission: anyone who can edit the configuration file can change it.
 
 ## Local callback forwarding
 

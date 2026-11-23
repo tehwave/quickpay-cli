@@ -15,6 +15,15 @@ it('accepts exact bounded merchant names', function (string $name): void {
     'cancel label' => 'Cancel',
 ]);
 
+it('finds a saved name that differs only in capitalization', function (string $name, array $saved, ?string $variant): void {
+    expect(MerchantName::caseVariant($name, $saved))->toBe($variant);
+})->with([
+    'case variant' => ['my website', ['My Website', 'shop-b'], 'My Website'],
+    'exact name is not a variant' => ['My Website', ['My Website'], null],
+    'different name' => ['shop-c', ['shop-a', 'shop-b'], null],
+    'empty store' => ['shop-a', [], null],
+]);
+
 it('rejects unsafe merchant names without echoing input', function (string $name): void {
     expect(fn () => MerchantName::validate($name))->toThrow(CredentialException::class);
 })->with([
