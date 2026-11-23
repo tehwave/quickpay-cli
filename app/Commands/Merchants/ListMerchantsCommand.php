@@ -27,7 +27,7 @@ class ListMerchantsCommand extends BaseCommand
         $rows = array_map(fn (string $name): array => [
             'name' => $name,
             'default' => $config['default_merchant'] === $name,
-            'write' => $config['merchants'][$name]['write'],
+            'read_only' => $config['merchants'][$name]['read_only'],
         ], $names);
 
         if ($this->option('json')) {
@@ -36,13 +36,13 @@ class ListMerchantsCommand extends BaseCommand
             $this->line('No saved merchants. Run quickpay merchants:add <name> first.');
         } else {
             // Access is shown only when a merchant is read-only.
-            $showAccess = in_array(false, array_column($rows, 'write'), true);
+            $showAccess = in_array(true, array_column($rows, 'read_only'), true);
             $this->table(
                 ['Merchant', 'Global default', ...($showAccess ? ['Access'] : [])],
                 array_map(fn (array $row): array => [
                     $row['name'],
                     $row['default'] ? 'yes' : '',
-                    ...($showAccess ? [$row['write'] ? '' : (new MerchantAccess(false))->label()] : []),
+                    ...($showAccess ? [$row['read_only'] ? (new MerchantAccess(readOnly: true))->label() : ''] : []),
                 ], $rows),
             );
         }

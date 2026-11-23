@@ -37,7 +37,7 @@ class ActiveMerchantCommand extends AuthenticatedCommand
             'selection_source' => $key?->selectionSource(),
             'credential_source' => $key?->source(),
             'configured' => $key !== null,
-            'write' => $key?->access()->write,
+            'read_only' => $key?->access()->readOnly,
             'checked' => $checkRequested,
             'authenticated' => $authenticated,
             'api_base_url' => QuickpayClient::BASE_URL,
@@ -51,7 +51,7 @@ class ActiveMerchantCommand extends AuthenticatedCommand
             $this->line('Merchant: '.($status['merchant'] ?? ($key === null ? 'none' : 'not associated with a saved merchant')));
             $this->line('Selection source: '.($status['selection_source'] ?? 'none'));
             $this->line('Credential source: '.($status['credential_source'] ?? 'none'));
-            if ($key !== null && ! $key->access()->write) {
+            if ($key !== null && $key->access()->readOnly) {
                 $this->line('Access: '.$key->access()->label());
             }
             $this->line('Credentials configured: '.($status['configured'] ? 'yes' : 'no'));

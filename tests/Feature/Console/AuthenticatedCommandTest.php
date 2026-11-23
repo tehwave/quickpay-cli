@@ -209,7 +209,7 @@ it('keeps scoped and account-wide watchers pinned after selection and removal', 
 })->with(['scoped' => true, 'account-wide' => false]);
 
 it('blocks writes for a read-only merchant before any request or confirmation', function (string $class, array $arguments, string $method): void {
-    $this->store->add('shop-r', 'fake-secret-r', write: false);
+    $this->store->add('shop-r', 'fake-secret-r', readOnly: true);
     Http::fake();
     $command = new $class;
     $command->setLaravel(app());
@@ -232,7 +232,7 @@ it('blocks writes for a read-only merchant before any request or confirmation', 
 ]);
 
 it('still reads through a read-only merchant', function (string $command, array $arguments, string $path, mixed $body): void {
-    $this->store->add('shop-r', 'fake-secret-r', write: false);
+    $this->store->add('shop-r', 'fake-secret-r', readOnly: true);
     Http::fake([
         'https://api.quickpay.net'.$path.'*' => Http::response($body),
         'http://localhost/callback' => Http::response('', 204),

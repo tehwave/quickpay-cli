@@ -53,6 +53,6 @@ final readonly class ApiKeyResolver
 
         $saved = $config['merchants'][$name];
 
-        return new ApiKey($saved['api_key'], 'config file', new MerchantAccess($saved['write']), $name, $source);
+        return new ApiKey($saved['api_key'], 'config file', new MerchantAccess($saved['read_only']), $name, $source);
     }
 }

@@ -56,12 +56,12 @@ workflows stay attached to the same credential even if local configuration
 changes. Saved labels identify local configuration; actual merchant IDs come
 from Quickpay resources, when available.
 
-Each saved merchant also stores a `write` flag. For a read-only merchant,
+Each saved merchant also stores a `read_only` flag. For a read-only merchant,
 `QuickpayClient` refuses every method except `GET` before sending it. Capture,
 refund, cancel and raw mutations check the flag before inspecting a payment or
-asking for confirmation. Making a merchant read-only works anywhere; allowing
-writes again, with `merchants:access` or `merchants:add --replace`, needs an
-interactive terminal and a confirmation. A key from `QUICKPAY_API_KEY` has full
+asking for confirmation. Making a merchant read-only works anywhere, and
+`merchants:add --replace` keeps it read-only. Only `merchants:access --read-write`
+allows writes again, and it needs an interactive terminal and a confirmation. A key from `QUICKPAY_API_KEY` has full
 access. The flag is a local guardrail, not a Quickpay permission: anyone who can
 edit the configuration file can change it.
 

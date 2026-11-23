@@ -9,7 +9,7 @@ use JsonException;
 use stdClass;
 
 /**
- * @phpstan-type SavedMerchant array{api_key: string, write: bool}
+ * @phpstan-type SavedMerchant array{api_key: string, read_only: bool}
  * @phpstan-type MerchantConfig array{default_merchant: ?string, merchants: array<string, SavedMerchant>}
  */
 final readonly class MerchantStore
@@ -81,10 +81,10 @@ final readonly class MerchantStore
                 || trim($merchant->api_key) === '') {
                 throw new CredentialException('Quickpay CLI merchant configuration contains an invalid credential.');
             }
-            if (count(get_object_vars($merchant)) !== 2 || ! is_bool($merchant->write ?? null)) {
-                throw new CredentialException('Quickpay CLI merchant configuration needs exactly an API key and a true or false write flag for each merchant.');
+            if (count(get_object_vars($merchant)) !== 2 || ! is_bool($merchant->read_only ?? null)) {
+                throw new CredentialException('Quickpay CLI merchant configuration needs exactly an API key and a true or false read_only flag for each merchant.');
             }
-            $merchants[$name] = ['api_key' => $merchant->api_key, 'write' => $merchant->write];
+            $merchants[$name] = ['api_key' => $merchant->api_key, 'read_only' => $merchant->read_only];
         }
         $this->validateLabels($merchants);
 
@@ -96,11 +96,11 @@ final readonly class MerchantStore
     }
 
     /**
-     * Saves a credential and returns the access it was saved with. A null flag
-     * keeps the replaced merchant's flag, or allows that kind of request for a
-     * new merchant.
+     * Saves a credential and returns the access it was saved with. A
+     * replacement keeps a read-only merchant read-only: only changeAccess can
+     * allow writes again.
      */
-    public function add(string $name, string $apiKey, bool $replace = false, ?bool $write = null): MerchantAccess
+    public function add(string $name, string $apiKey, bool $replace = false, bool $readOnly = false): MerchantAccess
     {
         MerchantName::validate($name);
         $apiKey = trim($apiKey);
@@ -108,7 +108,7 @@ final readonly class MerchantStore
             throw new CredentialException('API key cannot be empty.');
         }
         $access = null;
-        $this->mutate(function (array $config) use ($name, $apiKey, $replace, $write, &$access): array {
+        $this->mutate(function (array $config) use ($name, $apiKey, $replace, $readOnly, &$access): array {
             if (isset($config['merchants'][$name]) && ! $replace) {
                 throw new CredentialException('Merchant is already saved. Use --replace to replace its credential.');
             }
@@ -119,8 +119,8 @@ final readonly class MerchantStore
                 $config['default_merchant'] = $name;
             }
             $existing = $config['merchants'][$name] ?? null;
-            $access = new MerchantAccess($write ?? $existing['write'] ?? true);
-            $config['merchants'][$name] = ['api_key' => $apiKey, 'write' => $access->write];
+            $access = new MerchantAccess($readOnly || ($existing['read_only'] ?? false));
+            $config['merchants'][$name] = ['api_key' => $apiKey, 'read_only' => $access->readOnly];
             $this->validateLabels($config['merchants']);
 
             return $config;
@@ -140,15 +140,15 @@ final readonly class MerchantStore
         });
     }
 
-    /** Sets the write flag under the store lock. */
-    public function changeAccess(string $name, bool $write): MerchantAccess
+    /** Sets the read_only flag under the store lock. */
+    public function changeAccess(string $name, bool $readOnly): MerchantAccess
     {
         MerchantName::validate($name);
         $access = null;
-        $this->mutate(function (array $config) use ($name, $write, &$access): array {
+        $this->mutate(function (array $config) use ($name, $readOnly, &$access): array {
             $this->requireMerchant($config, $name);
-            $access = new MerchantAccess($write);
-            $config['merchants'][$name] = [...$config['merchants'][$name], 'write' => $write];
+            $access = new MerchantAccess($readOnly);
+            $config['merchants'][$name] = [...$config['merchants'][$name], 'read_only' => $readOnly];
 
             return $config;
         });

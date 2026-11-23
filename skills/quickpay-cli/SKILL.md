@@ -51,12 +51,12 @@ and `auth` commands and `~/.config/quickpay/config.json` are not supported.
 Existing users add their merchants again; no automatic migration occurs.
 
 A saved merchant can be read-only: it may send `GET` requests but no writes
-(`POST`, `PUT`, `PATCH`, `DELETE`). `merchants:active --json` reports `write`. A
+(`POST`, `PUT`, `PATCH`, `DELETE`). `merchants:active --json` reports `read_only`. A
 blocked write fails with "is read-only" before anything is sent. That protection
 is the user's decision: stop and report it. Never lift or bypass it by running
-`merchants:access --write`, re-adding the merchant, editing configuration files,
+`merchants:access --read-write`, re-adding the merchant, editing configuration files,
 or switching to another merchant or to `QUICKPAY_API_KEY`. Make a merchant
-read-only with `--no-write` only when the user asks.
+read-only with `--read-only` only when the user asks.
 
 ## Safety workflow
 
@@ -81,8 +81,8 @@ For a refund or cancellation, use the same inspect → verify → explicit autho
 
 ```text
 quickpay about
-quickpay merchants:add <name> [--replace] [--no-write]
-quickpay merchants:access <name> [--write|--no-write]
+quickpay merchants:add <name> [--replace] [--read-only]
+quickpay merchants:access <name> [--read-only|--read-write]
 quickpay merchants:list [--json]
 quickpay merchants:select [<name>] [--local]
 quickpay merchants:active [--merchant=name] [--check] [--json]
@@ -172,5 +172,5 @@ Do not use full URLs, hosts, schemes, `..`, backslashes, or fragments. The CLI o
 - A raw `GET` needs no `--yes`; a raw `POST`, `PUT`, `PATCH`, or `DELETE` does.
 - `quickpay merchants:active --check --json` checks API access; never replace it with printing or testing a key in an argument.
 - `merchants:active` without `--check` does not prove that a credential works.
-- Check `write` in `merchants:active --merchant=<name> --json` before planning a mutation.
+- Check `read_only` in `merchants:active --merchant=<name> --json` before planning a mutation.
 - Use the same `--merchant` for readiness checks, payment inspection and any explicitly authorized mutation.

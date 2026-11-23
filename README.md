@@ -65,14 +65,15 @@ list and inspect payments, but it can't create, capture, refund or cancel them,
 or send a raw `POST`, `PUT`, `PATCH` or `DELETE`:
 
 ```bash
-quickpay merchants:add "My Website" --no-write
-quickpay merchants:access "My Website" --no-write
-quickpay merchants:access "My Website" --write
+quickpay merchants:add "My Website" --read-only
+quickpay merchants:access "My Website" --read-only
+quickpay merchants:access "My Website" --read-write
 ```
 
-A blocked request stops before anything reaches Quickpay. Allowing writes again,
-with `merchants:access` or `merchants:add --replace`, asks you to confirm in an
-interactive terminal, so a script or agent can't lift the protection on its own.
+A blocked request stops before anything reaches Quickpay. Replacing the key with
+`merchants:add --replace` keeps the merchant read-only. `--read-write` asks you to
+confirm in an interactive terminal, so a script or agent can't lift the
+protection on its own.
 A key in `QUICKPAY_API_KEY` always has full access.
 
 ## Payments

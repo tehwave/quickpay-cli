@@ -110,7 +110,7 @@ it('turns connection failures into a safe exception', function () {
 
 it('sends no write request from a read-only merchant', function (string $method): void {
     Http::fake();
-    $client = new QuickpayClient(app(Factory::class), 'test-secret', new MerchantAccess(false));
+    $client = new QuickpayClient(app(Factory::class), 'test-secret', new MerchantAccess(readOnly: true));
 
     expect(fn () => $client->raw($method, '/payments/42', data: ['amount' => 1000]))
         ->toThrow(MerchantAccessException::class, 'is read-only, so the '.strtoupper($method).' request was not sent.');
@@ -119,7 +119,7 @@ it('sends no write request from a read-only merchant', function (string $method)
 
 it('applies write protection to first-class requests', function (): void {
     Http::fake(['https://api.quickpay.net/payments*' => Http::response(['id' => 42])]);
-    $readOnly = new QuickpayClient(app(Factory::class), 'test-secret', new MerchantAccess(false));
+    $readOnly = new QuickpayClient(app(Factory::class), 'test-secret', new MerchantAccess(readOnly: true));
 
     expect($readOnly->get('/payments/42')->successful())->toBeTrue()
         ->and($readOnly->raw('GET', '/payments/42')->successful())->toBeTrue()

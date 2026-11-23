@@ -12,22 +12,16 @@ use App\Credentials\MerchantName;
 use App\Credentials\MerchantStore;
 use App\Quickpay\Exceptions\QuickpayRequestException;
 use App\Quickpay\MerchantAuthenticationCheck;
-use Symfony\Component\Console\Input\InputOption;
 use UnexpectedValueException;
 
 class AddMerchantCommand extends BaseCommand
 {
     protected $signature = 'merchants:add
         {name : Local merchant name, for example "My Website"}
-        {--replace : Replace this saved merchant credential after validation}';
+        {--replace : Replace this saved merchant credential after validation}
+        {--read-only : Block write requests (POST, PUT, PATCH, DELETE). --replace keeps a read-only merchant read-only}';
 
     protected $description = 'Validate and save API access to an existing Quickpay merchant';
-
-    public function __construct()
-    {
-        parent::__construct();
-        $this->addOption('write', null, InputOption::VALUE_NEGATABLE, 'Allow write requests (POST, PUT, PATCH, DELETE). Allowed by default; --replace keeps the saved setting');
-    }
 
     public function handle(MerchantStore $store, MerchantAuthenticationCheck $check, StdinTerminalDetector $terminal): int
     {
@@ -50,22 +44,6 @@ class AddMerchantCommand extends BaseCommand
                 return $this->failure('Adding a merchant requires an interactive terminal. Use QUICKPAY_API_KEY for automation.');
             }
 
-            $write = $this->option('write');
-            $write = is_bool($write) ? $write : null;
-            $lifting = false;
-            if ($saved && $write === true) {
-                // A replacement keeps the saved flag, so making a read-only
-                // merchant writable asks first, the same way merchants:access does.
-                // Allowing what is already allowed is dropped rather than saved.
-                $lifting = ! $config['merchants'][$name]['write'];
-                $write = $lifting ? true : null;
-                if ($lifting && ! $this->confirm('Allow write requests for '.$name.'?', false)) {
-                    $this->line('Cancelled.');
-
-                    return self::SUCCESS;
-                }
-            }
-
             $answer = $this->secret('API key');
             $apiKey = is_string($answer) ? trim($answer) : '';
 
@@ -79,9 +57,9 @@ class AddMerchantCommand extends BaseCommand
             }
 
             $check->check($credential);
-            $access = $store->add($name, $apiKey, (bool) $this->option('replace'), $write);
+            $access = $store->add($name, $apiKey, (bool) $this->option('replace'), (bool) $this->option('read-only'));
             $this->info('Merchant saved: '.$name);
-            if (! $access->write || $lifting) {
+            if ($access->readOnly) {
                 $this->line('Access: '.$access->label());
             }
 

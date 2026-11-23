@@ -2,28 +2,28 @@
 
 use App\Credentials\MerchantAccess;
 
-it('always allows GET and blocks every other method for a read-only merchant', function (bool $write, string $method, bool $allowed): void {
-    expect((new MerchantAccess($write))->allows($method))->toBe($allowed);
+it('always allows GET and blocks every other method for a read-only merchant', function (bool $readOnly, string $method, bool $allowed): void {
+    expect((new MerchantAccess($readOnly))->allows($method))->toBe($allowed);
 })->with([
-    'read-only GET' => [false, 'GET', true],
-    'read-only lowercase get' => [false, 'get', true],
-    'read-only POST' => [false, 'POST', false],
-    'read-only PUT' => [false, 'put', false],
-    'read-only PATCH' => [false, 'PATCH', false],
-    'read-only DELETE' => [false, 'DELETE', false],
-    'read-only unknown method' => [false, 'OPTIONS', false],
-    'full GET' => [true, 'GET', true],
-    'full PUT' => [true, 'PUT', true],
-    'full DELETE' => [true, 'DELETE', true],
+    'read-only GET' => [true, 'GET', true],
+    'read-only lowercase get' => [true, 'get', true],
+    'read-only POST' => [true, 'POST', false],
+    'read-only PUT' => [true, 'put', false],
+    'read-only PATCH' => [true, 'PATCH', false],
+    'read-only DELETE' => [true, 'DELETE', false],
+    'read-only unknown method' => [true, 'OPTIONS', false],
+    'full GET' => [false, 'GET', true],
+    'full PUT' => [false, 'PUT', true],
+    'full DELETE' => [false, 'DELETE', true],
 ]);
 
-it('names the access', function (bool $write, string $label): void {
-    expect((new MerchantAccess($write))->label())->toBe($label);
+it('names the access', function (bool $readOnly, string $label): void {
+    expect((new MerchantAccess($readOnly))->label())->toBe($label);
 })->with([
-    'full' => [true, 'read and write'],
-    'read-only' => [false, 'read-only'],
+    'full' => [false, 'read and write'],
+    'read-only' => [true, 'read-only'],
 ]);
 
 it('grants full access through the named constructor', function (): void {
-    expect(MerchantAccess::full()->write)->toBeTrue();
+    expect(MerchantAccess::full()->readOnly)->toBeFalse();
 });

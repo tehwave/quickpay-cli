@@ -25,7 +25,7 @@ it('keeps the first default when adding another merchant', function (): void {
     $store->add('shop-b', 'fake-secret-b');
     expect($store->read())->toBe([
         'default_merchant' => 'shop-a',
-        'merchants' => ['shop-a' => ['api_key' => 'fake-secret-a', 'write' => true], 'shop-b' => ['api_key' => 'fake-secret-b', 'write' => true]],
+        'merchants' => ['shop-a' => ['api_key' => 'fake-secret-a', 'read_only' => false], 'shop-b' => ['api_key' => 'fake-secret-b', 'read_only' => false]],
     ]);
 });
 
@@ -62,7 +62,7 @@ it('replaces only the explicitly named credential', function (): void {
     $store->add('shop-b', ' fake-replacement ', true);
     expect($store->read())->toBe([
         'default_merchant' => 'shop-a',
-        'merchants' => ['shop-a' => ['api_key' => 'fake-secret-a', 'write' => true], 'shop-b' => ['api_key' => 'fake-replacement', 'write' => true]],
+        'merchants' => ['shop-a' => ['api_key' => 'fake-secret-a', 'read_only' => false], 'shop-b' => ['api_key' => 'fake-replacement', 'read_only' => false]],
     ]);
 });
 
@@ -100,61 +100,68 @@ it('rejects invalid storage without treating it as empty', function (string $con
 })->with([
     'broken' => '{broken', 'root list' => '[]', 'missing' => '{}',
     'merchant list' => '{"default_merchant":null,"merchants":[]}',
-    'numeric key' => '{"default_merchant":null,"merchants":{"shop-a":{"api_key":123,"write":true}}}',
-    'empty key' => '{"default_merchant":null,"merchants":{"shop-a":{"api_key":" ","write":true}}}',
-    'invalid name' => '{"default_merchant":null,"merchants":{"../a":{"api_key":"fake-key","write":true}}}',
+    'numeric key' => '{"default_merchant":null,"merchants":{"shop-a":{"api_key":123,"read_only":false}}}',
+    'empty key' => '{"default_merchant":null,"merchants":{"shop-a":{"api_key":" ","read_only":false}}}',
+    'invalid name' => '{"default_merchant":null,"merchants":{"../a":{"api_key":"fake-key","read_only":false}}}',
     'dangling default' => '{"default_merchant":"shop-a","merchants":{}}',
     'old shape' => '{"api_key":"fake-legacy"}',
-    'secret label' => '{"default_merchant":null,"merchants":{"secret-name":{"api_key":"secret","write":true}}}',
-    'duplicate merchant' => '{"default_merchant":"shop-a","merchants":{"shop-a":{"api_key":"fake-first","write":true},"shop-a":{"api_key":"fake-last","write":true}}}',
-    'escaped duplicate merchant' => '{"default_merchant":"shop-a","merchants":{"shop-a":{"api_key":"fake-first","write":true},"sh\\u006fp-a":{"api_key":"fake-last","write":true}}}',
-    'duplicate key' => '{"default_merchant":"shop-a","merchants":{"shop-a":{"api_key":"fake-first","api_key":"fake-last","write":true}}}',
-    'duplicate default' => '{"default_merchant":"shop-a","default_merchant":null,"merchants":{"shop-a":{"api_key":"fake-first","write":true}}}',
-    'missing write flag' => '{"default_merchant":null,"merchants":{"shop-a":{"api_key":"fake-key"}}}',
-    'string write flag' => '{"default_merchant":null,"merchants":{"shop-a":{"api_key":"fake-key","write":"true"}}}',
-    'read flag' => '{"default_merchant":null,"merchants":{"shop-a":{"api_key":"fake-key","read":true,"write":true}}}',
-    'null write flag' => '{"default_merchant":null,"merchants":{"shop-a":{"api_key":"fake-key","write":null}}}',
-    'extra merchant field' => '{"default_merchant":null,"merchants":{"shop-a":{"api_key":"fake-key","write":true,"note":"x"}}}',
-    'duplicate write flag' => '{"default_merchant":null,"merchants":{"shop-a":{"api_key":"fake-key","write":false,"write":true}}}',
+    'secret label' => '{"default_merchant":null,"merchants":{"secret-name":{"api_key":"secret","read_only":false}}}',
+    'duplicate merchant' => '{"default_merchant":"shop-a","merchants":{"shop-a":{"api_key":"fake-first","read_only":false},"shop-a":{"api_key":"fake-last","read_only":false}}}',
+    'escaped duplicate merchant' => '{"default_merchant":"shop-a","merchants":{"shop-a":{"api_key":"fake-first","read_only":false},"sh\\u006fp-a":{"api_key":"fake-last","read_only":false}}}',
+    'duplicate key' => '{"default_merchant":"shop-a","merchants":{"shop-a":{"api_key":"fake-first","api_key":"fake-last","read_only":false}}}',
+    'duplicate default' => '{"default_merchant":"shop-a","default_merchant":null,"merchants":{"shop-a":{"api_key":"fake-first","read_only":false}}}',
+    'missing read_only flag' => '{"default_merchant":null,"merchants":{"shop-a":{"api_key":"fake-key"}}}',
+    'string read_only flag' => '{"default_merchant":null,"merchants":{"shop-a":{"api_key":"fake-key","read_only":"true"}}}',
+    'write flag' => '{"default_merchant":null,"merchants":{"shop-a":{"api_key":"fake-key","write":true}}}',
+    'null read_only flag' => '{"default_merchant":null,"merchants":{"shop-a":{"api_key":"fake-key","read_only":null}}}',
+    'extra merchant field' => '{"default_merchant":null,"merchants":{"shop-a":{"api_key":"fake-key","read_only":false,"note":"x"}}}',
+    'duplicate read_only flag' => '{"default_merchant":null,"merchants":{"shop-a":{"api_key":"fake-key","read_only":true,"read_only":false}}}',
 ]);
 
-it('explains a missing write flag without revealing the credential', function (): void {
+it('explains a missing read_only flag without revealing the credential', function (): void {
     mkdir(dirname($this->path), 0700, true);
     file_put_contents($this->path, '{"default_merchant":null,"merchants":{"shop-a":{"api_key":"fake-secret-a"}}}');
     expect(fn () => (new MerchantStore($this->path))->read())
-        ->toThrow(CredentialException::class, 'a true or false write flag');
+        ->toThrow(CredentialException::class, 'a true or false read_only flag');
 });
 
-it('saves the write flag for a new merchant and defaults to full access', function (): void {
+it('saves the read_only flag for a new merchant and defaults to full access', function (): void {
     $store = new MerchantStore($this->path);
     $store->add('shop-a', 'fake-secret-a');
-    $store->add('shop-b', 'fake-secret-b', write: false);
+    $store->add('shop-b', 'fake-secret-b', readOnly: true);
     expect($store->read()['merchants'])->toBe([
-        'shop-a' => ['api_key' => 'fake-secret-a', 'write' => true],
-        'shop-b' => ['api_key' => 'fake-secret-b', 'write' => false],
+        'shop-a' => ['api_key' => 'fake-secret-a', 'read_only' => false],
+        'shop-b' => ['api_key' => 'fake-secret-b', 'read_only' => true],
     ]);
 });
 
-it('keeps the write flag when replacing a credential unless a new one is given', function (): void {
+it('keeps a read-only merchant read-only when replacing its credential', function (): void {
     $store = new MerchantStore($this->path);
-    $store->add('shop-a', 'fake-original', write: false);
+    $store->add('shop-a', 'fake-original', readOnly: true);
     $store->add('shop-a', 'fake-replacement', true);
-    expect($store->read()['merchants']['shop-a'])->toBe(['api_key' => 'fake-replacement', 'write' => false]);
-    $store->add('shop-a', 'fake-second', true, write: true);
-    expect($store->read()['merchants']['shop-a'])->toBe(['api_key' => 'fake-second', 'write' => true]);
+    expect($store->read()['merchants']['shop-a'])->toBe(['api_key' => 'fake-replacement', 'read_only' => true]);
+    $store->add('shop-a', 'fake-second', true, readOnly: false);
+    expect($store->read()['merchants']['shop-a'])->toBe(['api_key' => 'fake-second', 'read_only' => true]);
 });
 
-it('changes only the write flag and keeps the credential', function (): void {
+it('makes a merchant read-only when replacing its credential with the flag', function (): void {
+    $store = new MerchantStore($this->path);
+    $store->add('shop-a', 'fake-original');
+    expect($store->add('shop-a', 'fake-replacement', true, readOnly: true)->readOnly)->toBeTrue()
+        ->and($store->read()['merchants']['shop-a'])->toBe(['api_key' => 'fake-replacement', 'read_only' => true]);
+});
+
+it('changes only the read_only flag and keeps the credential', function (): void {
     $store = new MerchantStore($this->path);
     $store->add('shop-a', 'fake-secret-a');
     $store->add('shop-b', 'fake-secret-b');
-    expect($store->changeAccess('shop-a', true)->write)->toBeTrue()
-        ->and($store->changeAccess('shop-a', false)->write)->toBeFalse()
+    expect($store->changeAccess('shop-a', false)->readOnly)->toBeFalse()
+        ->and($store->changeAccess('shop-a', true)->readOnly)->toBeTrue()
         ->and($store->read())->toBe([
             'default_merchant' => 'shop-a',
             'merchants' => [
-                'shop-a' => ['api_key' => 'fake-secret-a', 'write' => false],
-                'shop-b' => ['api_key' => 'fake-secret-b', 'write' => true],
+                'shop-a' => ['api_key' => 'fake-secret-a', 'read_only' => true],
+                'shop-b' => ['api_key' => 'fake-secret-b', 'read_only' => false],
             ],
         ]);
 });
@@ -163,7 +170,7 @@ it('refuses to change access for an unsaved merchant without writing', function 
     $store = new MerchantStore($this->path);
     $store->add('shop-a', 'fake-secret-a');
     $before = file_get_contents($this->path);
-    expect(fn () => $store->changeAccess($name, write: false))->toThrow(CredentialException::class);
+    expect(fn () => $store->changeAccess($name, readOnly: true))->toThrow(CredentialException::class);
     expect(file_get_contents($this->path))->toBe($before);
 })->with(['unsaved' => 'shop-b', 'invalid' => '../shop-a']);
 
@@ -275,7 +282,7 @@ it('waits on a stable lock during replacement', function (): void {
         $read = [$pipes[1]];
         $write = $except = [];
         expect(stream_select($read, $write, $except, 0, 50000))->toBe(0);
-        file_put_contents($this->path.'.replacement', '{"default_merchant":"shop-c","merchants":{"shop-c":{"api_key":"fake-secret-c","write":true}}}');
+        file_put_contents($this->path.'.replacement', '{"default_merchant":"shop-c","merchants":{"shop-c":{"api_key":"fake-secret-c","read_only":false}}}');
         rename($this->path.'.replacement', $this->path);
         flock($lock, LOCK_UN);
         expect(fgets($pipes[1]))->toBe("done\n")

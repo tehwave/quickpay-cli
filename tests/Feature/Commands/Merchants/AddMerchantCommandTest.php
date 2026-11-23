@@ -104,7 +104,7 @@ it('handles network failure without leaking or storing credentials', function ()
     expect(file_exists($this->store->path()))->toBeFalse();
 });
 
-it('saves the write flag given when adding a merchant', function (array $flags, array $saved, ?string $label): void {
+it('saves a merchant as read-only when asked', function (array $flags, array $saved, ?string $label): void {
     Http::fake(['https://api.quickpay.net/ping' => Http::response(['scope' => 'merchant'])]);
     $command = $this->artisan('merchants:add', ['name' => 'shop-a', ...$flags])
         ->expectsQuestion('API key', 'fake-secret-a');
@@ -113,43 +113,23 @@ it('saves the write flag given when adding a merchant', function (array $flags, 
     expect($this->store->read()['merchants']['shop-a'])->toBe(['api_key' => 'fake-secret-a', ...$saved]);
     Http::assertSentCount(1);
 })->with([
-    'default' => [[], ['write' => true], null],
-    'read-only' => [['--no-write' => true], ['write' => false], 'read-only'],
+    'default' => [[], ['read_only' => false], null],
+    'read-only' => [['--read-only' => true], ['read_only' => true], 'read-only'],
 ]);
 
-it('keeps the write flag when replacing a credential', function (): void {
+it('keeps a read-only merchant read-only when replacing its credential', function (): void {
     Http::fake(['https://api.quickpay.net/ping' => Http::response(['scope' => 'merchant'])]);
-    $this->store->add('shop-a', 'fake-original', write: false);
+    $this->store->add('shop-a', 'fake-original', readOnly: true);
     $this->artisan('merchants:add', ['name' => 'shop-a', '--replace' => true])
         ->expectsQuestion('API key', 'fake-replacement')->expectsOutputToContain('Access: read-only')->assertExitCode(0);
-    expect($this->store->read()['merchants']['shop-a'])->toBe(['api_key' => 'fake-replacement', 'write' => false]);
+    expect($this->store->read()['merchants']['shop-a'])->toBe(['api_key' => 'fake-replacement', 'read_only' => true]);
 });
 
-it('asks before a replacement makes a read-only merchant writable', function (): void {
-    Http::fake(['https://api.quickpay.net/ping' => Http::response(['scope' => 'merchant'])]);
-    $this->store->add('shop-a', 'fake-original', write: false);
-    $this->artisan('merchants:add', ['name' => 'shop-a', '--replace' => true, '--write' => true])
-        ->expectsConfirmation('Allow write requests for shop-a?', 'yes')
-        ->expectsQuestion('API key', 'fake-replacement')
-        ->expectsOutputToContain('Access: read and write')->assertExitCode(0);
-    expect($this->store->read()['merchants']['shop-a'])->toBe(['api_key' => 'fake-replacement', 'write' => true]);
-});
-
-it('keeps the saved merchant when allowing writes is declined', function (): void {
-    $this->store->add('shop-a', 'fake-original', write: false);
-    $before = file_get_contents($this->store->path());
-    $this->artisan('merchants:add', ['name' => 'shop-a', '--replace' => true, '--write' => true])
-        ->expectsConfirmation('Allow write requests for shop-a?', 'no')
-        ->expectsOutputToContain('Cancelled.')->assertExitCode(0);
-    expect(file_get_contents($this->store->path()))->toBe($before);
-    Http::assertNothingSent();
-});
-
-it('does not ask when a replacement allows what is already allowed', function (): void {
+it('makes a merchant read-only when replacing its credential with the flag', function (): void {
     Http::fake(['https://api.quickpay.net/ping' => Http::response(['scope' => 'merchant'])]);
     $this->store->add('shop-a', 'fake-original');
-    $this->artisan('merchants:add', ['name' => 'shop-a', '--replace' => true, '--write' => true])
+    $this->artisan('merchants:add', ['name' => 'shop-a', '--replace' => true, '--read-only' => true])
         ->expectsQuestion('API key', 'fake-replacement')
-        ->doesntExpectOutputToContain('Access:')->assertExitCode(0);
-    expect($this->store->read()['merchants']['shop-a'])->toBe(['api_key' => 'fake-replacement', 'write' => true]);
+        ->expectsOutputToContain('Access: read-only')->assertExitCode(0);
+    expect($this->store->read()['merchants']['shop-a'])->toBe(['api_key' => 'fake-replacement', 'read_only' => true]);
 });
