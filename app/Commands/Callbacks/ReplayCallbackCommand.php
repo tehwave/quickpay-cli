@@ -5,6 +5,7 @@ namespace App\Commands\Callbacks;
 use App\Callbacks\Input\CallbackRequest;
 use App\Callbacks\ReplayCallback;
 use App\Callbacks\ReplayResult;
+use App\Callbacks\Resolution\PrivateKeyResolver;
 use App\Console\AuthenticatedCommand;
 use App\Console\Output\JsonOutput;
 use App\Console\Output\ResponseBodySanitizer;
@@ -30,21 +31,26 @@ class ReplayCallbackCommand extends AuthenticatedCommand
     public function handle(
         AuthenticatedQuickpayFactory $quickpay,
         ReplayCallback $replay,
+        PrivateKeyResolver $privateKeys,
     ): int {
         return $this->withQuickpay(
             $quickpay,
-            fn (AuthenticatedQuickpay $authenticated): int => $this->present(
-                $replay->execute(
-                    $authenticated->client,
+            function (AuthenticatedQuickpay $authenticated) use ($replay, $privateKeys): int {
+                $request = CallbackRequest::from(
+                    $this->argument('payment-id'),
+                    $this->option('order-id'),
+                    $this->option('to'),
+                );
+                $warning = $privateKeys->overrideWarning($authenticated->apiKey);
+                if ($warning !== null) {
+                    $this->writeSafetyLine($authenticated->safeLine($warning));
+                }
+
+                return $this->present(
+                    $replay->execute($authenticated->client, $authenticated->apiKey->value(), $request),
                     $authenticated->apiKey->value(),
-                    CallbackRequest::from(
-                        $this->argument('payment-id'),
-                        $this->option('order-id'),
-                        $this->option('to'),
-                    ),
-                ),
-                $authenticated->apiKey->value(),
-            ),
+                );
+            },
         );
     }
 

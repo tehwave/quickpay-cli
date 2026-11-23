@@ -219,7 +219,6 @@ final class CallbackWatchRunner implements CallbackWatcher
             $payment,
             $apiKey,
             $privateKey,
-            $operationId,
         );
 
         $attempt = 0;

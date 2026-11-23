@@ -6,9 +6,7 @@
 [![PHP 8.4+](https://img.shields.io/badge/PHP-8.4%2B-777BB4.svg)](https://www.php.net/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
-**Manage Quickpay payments and test callbacks from your terminal.**
-
-Create payment links, manage payments through the [Quickpay API](https://learn.quickpay.net/tech-talk/api/), use JSON output in scripts or for agents, and receive signed callbacks on localhost without a tunnel.
+Manage Quickpay payments, create payment links, and relay signed callbacks to localhost without a tunnel.
 
 ## Features
 
@@ -21,90 +19,119 @@ Create payment links, manage payments through the [Quickpay API](https://learn.q
 
 ⭐ If you like Quickpay CLI, [star it on GitHub](https://github.com/tehwave/quickpay-cli). It helps a lot!
 
-## Installation
+## Install
 
-Quickpay CLI requires PHP 8.4 or newer.
+Requires PHP 8.4 or newer.
 
 ```bash
 composer global require tehwave/quickpay-cli
 ```
 
-Install the bundled skill for coding agents:
+## Authentication
+
+Sign in to [Quickpay Manager](https://manage.quickpay.net/) and select your merchant
+account. Open [Settings > Integration](https://quickpay.net/helpdesk/integration-setup/)
+and copy the API key under **API User**. Then run:
 
 ```bash
-skills add tehwave/quickpay-cli
+quickpay merchants:add "My Website"
 ```
 
-Authenticate with a Quickpay merchant API key:
+Paste the key when prompted. Your input stays hidden, and the CLI saves the key in
+`~/.config/quickpay-cli/config.json`. The first merchant becomes your default.
+
+## Merchants
 
 ```bash
-quickpay login
+quickpay merchants:add "My Other Website"
+quickpay merchants:select "My Other Website"
+quickpay merchants:active --check
+quickpay payments:list --merchant="My Website"
 ```
 
-For automation, supply the API key through `QUICKPAY_API_KEY`.
+To use a different merchant for a project, run
+`quickpay merchants:select "My Website" --local` from the project folder. Commands in
+that folder and its subfolders will use **My Website** instead of your default merchant.
+You can still choose another merchant for a single command with `--merchant`.
+The `.quickpay-cli.json` file holds only the merchant name, never a key. Add it to
+`.gitignore` when the choice is yours alone.
 
-## Usage
+For scripts and CI, you can supply the API key through `QUICKPAY_API_KEY`
+instead of saving a merchant. Use it outside folders with a project merchant
+selected, and leave out `--merchant`.
+
+### Read-only merchants
+
+Keep a merchant safe from changes by blocking its write requests. It can still
+list and inspect payments, but it can't create, capture, refund or cancel them,
+or send a raw `POST`, `PUT`, `PATCH` or `DELETE`:
 
 ```bash
-quickpay list
+quickpay merchants:access "My Website" --read-only
+quickpay merchants:access "My Website" --read-write
+quickpay merchants:add "My Shop" --read-only
 ```
 
-Use `--help` to explore any command and its options:
+A blocked request stops before anything reaches Quickpay. Replacing the key with
+`merchants:add --replace` keeps the merchant read-only, but removing it and adding
+it again saves it with full access unless you pass `--read-only`. `--read-write`
+asks you to confirm in an interactive terminal, so an unattended script can't
+lift the protection. It is a guardrail, not a lock: a tool that drives a
+terminal can still answer the prompt. A key in `QUICKPAY_API_KEY` always has
+full access.
+
+## Payments
 
 ```bash
-quickpay callbacks:watch --help
+quickpay payments:list
+quickpay payments:get <payment-id> --json
+quickpay payments:link <payment-id> 1000
 ```
 
-### Watch for callbacks and relay them
+Amounts are in minor units: `1000` is DKK 10.00 for a DKK payment.
+Capture, refund, cancel, and non-GET raw API requests require confirmation
+or `--yes` when running unattended.
+
+Run `quickpay list` for all commands or `quickpay <command> --help` for options.
+
+## Local callbacks
 
 ```bash
 quickpay callbacks:watch --to=http://127.0.0.1:8000/quickpay/callback
 ```
 
-Leave the watcher running while testing the payment flow. It signs and sends
-payment updates to your local callback handler.
+Leave it running while testing your payment flow. It forwards new operations
+for all payments in the selected merchant account. Add a payment ID to watch
+one payment. Existing operations are not replayed.
 
-With no selector, the watcher forwards new operation callbacks for every
-payment changed after it becomes ready. Pass a payment ID or `--order-id` to
-narrow the watch to one payment. Existing operations are not replayed. The
-watcher runs in the foreground and has no JSON mode.
-
+To send a payment's current resource once:
 
 ```bash
-quickpay callbacks:replay <payment-id> --to=<corrected-url>
+quickpay callbacks:replay <payment-id> --to=http://127.0.0.1:8000/quickpay/callback
 ```
 
-## Development
+Callbacks are signed with the merchant's private key, which the CLI fetches from
+Quickpay. Set `QUICKPAY_PRIVATE_KEY` to use your own instead. Both commands warn
+when it is set while a saved merchant is selected, because it may belong to
+another merchant.
+
+## For agents
+
+Install the bundled [quickpay-cli skill](skills/quickpay-cli/SKILL.md):
 
 ```bash
-composer install
-composer check
-composer verify
+skills add tehwave/quickpay-cli
 ```
 
-`composer check` runs tests, static analysis, and formatting checks. `composer
-verify` additionally enforces coverage, validates package metadata, and audits
-the locked dependencies. The test suite uses HTTP fakes and does not contact
-Quickpay API.
+If you installed the earlier `quickpay` skill, remove its folder from your agent's
+skills directory first, so your agent stops using the removed `login` and `auth`
+commands.
 
-The versioned `builds/quickpay` PHAR is tracked so Packagist can install it
-without Laravel Zero's dependency graph. Maintainers build it with Laravel
-Zero's `app:build` command and commit it as described in `RELEASING.md`.
+## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) before changing commands or security behavior.
+See [CONTRIBUTING.md](CONTRIBUTING.md), [RELEASING.md](RELEASING.md), and
+[SECURITY.md](SECURITY.md).
 
-Maintainers should follow [RELEASING.md](RELEASING.md) for versioned releases.
-
-## Security
-
-Quickpay CLI keeps API keys out of command arguments and asks for confirmation before changing a payment.
-
-See [SECURITY.md](SECURITY.md) to report a vulnerability. Never include credentials or merchant data in an issue.
-
-## Credits
-
-Created and maintained by [Peter 🌊 Jørgensen](https://peterchrjoergensen.dk).
-
-Built with [Laravel Zero](https://laravel-zero.com/) and released under the [MIT License](LICENSE.md).
-
-Quickpay CLI is an independent open-source project. It is not affiliated with or endorsed by Quickpay.
+Created by [Peter Jørgensen](https://peterchrjoergensen.dk). Built with
+[Laravel Zero](https://laravel-zero.com/) and released under the [MIT License](LICENSE.md).
+Independent of and not endorsed by Quickpay.

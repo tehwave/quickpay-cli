@@ -8,7 +8,6 @@ use App\Console\Output\ResponseBodySanitizer;
 use App\Quickpay\AuthenticatedQuickpay;
 use App\Quickpay\AuthenticatedQuickpayFactory;
 use App\Quickpay\Raw\RawApiRequest;
-use Illuminate\Console\OutputStyle;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
@@ -46,8 +45,10 @@ class ApiRequestCommand extends AuthenticatedCommand
                 $this->option('data-json'),
                 (array) $this->option('header'),
             );
+            $authenticated->client->authorize($request->method);
 
             if ($request->mutation) {
+                $this->writeMerchantContext($authenticated);
                 $this->writeSafetyLine("Quickpay API request: {$request->method}");
 
                 if (! $confirmation->approve(
@@ -98,32 +99,5 @@ class ApiRequestCommand extends AuthenticatedCommand
 
             return self::SUCCESS;
         });
-    }
-
-    private function writeSafetyLine(string $message): void
-    {
-        // Keep stdout machine-readable in JSON mode without hiding mutation
-        // summaries and confirmation prompts from the operator.
-        $output = $this->option('json')
-            ? $this->getOutput()->getErrorStyle()
-            : $this->getOutput();
-
-        $output->writeln($message, OutputInterface::OUTPUT_RAW);
-    }
-
-    private function confirmMutation(): bool
-    {
-        if (! $this->option('json')) {
-            return $this->confirm('Continue?');
-        }
-
-        $output = $this->output;
-        $this->output = new OutputStyle($this->input, $output->getErrorStyle());
-
-        try {
-            return $this->confirm('Continue?');
-        } finally {
-            $this->output = $output;
-        }
     }
 }

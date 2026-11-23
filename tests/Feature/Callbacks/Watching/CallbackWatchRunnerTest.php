@@ -7,6 +7,7 @@ use App\Callbacks\Signing\CallbackEnvelopeFactory;
 use App\Callbacks\Watching\CallbackDeliveryException;
 use App\Callbacks\Watching\CallbackWatcherFactory;
 use App\Callbacks\Watching\CallbackWatchRunner;
+use App\Credentials\MerchantAccess;
 use App\Quickpay\QuickpayClient;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
@@ -667,7 +668,7 @@ it('honors a numeric retry-after while polling Quickpay', function () {
 
 it('assembles the production watcher from the credential-scoped clients', function () {
     $watcher = (new CallbackWatcherFactory)->make(
-        new QuickpayClient(app(Factory::class), 'api-key'),
+        new QuickpayClient(app(Factory::class), 'api-key', MerchantAccess::full()),
         app(Factory::class),
     );
 
@@ -701,7 +702,7 @@ function callbackWatchRunner(
     $remaining = $polls;
 
     return new CallbackWatchRunner(
-        locator: new PaymentLocator(new QuickpayClient(app(Factory::class), 'api-key')),
+        locator: new PaymentLocator(new QuickpayClient(app(Factory::class), 'api-key', MerchantAccess::full())),
         envelopes: new CallbackEnvelopeFactory,
         forwarder: new CallbackForwarder(app(Factory::class)),
         sleep: function (int $seconds) use (&$sleeps): void {

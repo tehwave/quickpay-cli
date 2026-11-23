@@ -39,6 +39,36 @@ Security-relevant areas include:
 - callback private-key retrieval and in-memory-only handling;
 - release artifact contents, checksums, and build provenance.
 
+## Merchant credentials and selection
+
+Saved merchant API keys live in `~/.config/quickpay-cli/config.json`, with a
+`0700` directory and `0600` file. Credential updates use a persistent sibling
+lock and atomic file replacement. `.quickpay-cli.json` selects an already saved
+merchant by its local label; it cannot provide credentials, API headers or URLs.
+Neither a binding nor selecting a merchant authorizes a payment mutation.
+
+Explicit `--merchant` selection overrides a project binding and global default.
+Malformed or stale bindings, and bindings owned by another user, fail without
+selecting another merchant. A non-empty
+`QUICKPAY_API_KEY` cannot be combined with an explicit or project selection.
+Each command resolves its key once, so running watchers and inspect/confirm
+workflows stay attached to the same credential even if local configuration
+changes. Saved labels identify local configuration; actual merchant IDs come
+from Quickpay resources, when available.
+
+Each saved merchant also stores a `read_only` flag. For a read-only merchant,
+`QuickpayClient` refuses every method except `GET` before sending it. Capture,
+refund, cancel and raw mutations check the flag before inspecting a payment or
+asking for confirmation. Making a merchant read-only works anywhere, and
+`merchants:add --replace` keeps it read-only. Writes are allowed again only by
+`merchants:access --read-write`, which needs an interactive terminal and a
+confirmation, or by removing the merchant and adding it again without
+`--read-only`, which needs its API key typed into an interactive terminal. A key
+from `QUICKPAY_API_KEY` has full access. The flag is a local guardrail, not a
+Quickpay permission or a lock: a program that drives a pseudo-terminal can
+answer the confirmation, and anyone who can edit the configuration file can
+change it.
+
 ## Local callback forwarding
 
 `callbacks:replay` and `callbacks:watch` send a signed payment resource to the
@@ -53,7 +83,10 @@ API key, Basic authorization, or Quickpay API request headers to the callback
 destination. The account private key comes from a non-empty
 `QUICKPAY_PRIVATE_KEY` or the authenticated `/account/private-key` endpoint and
 is retained in process memory only. It is never written to the CLI config,
-stdout, stderr, or local response summaries.
+stdout, stderr, or local response summaries. A manually supplied
+`QUICKPAY_PRIVATE_KEY` must belong to the selected merchant. Because nothing ties
+it to one, `callbacks:watch` and `callbacks:replay` warn when it is set while a
+saved merchant is selected.
 
 Because `--to` may name a public service, inspect it before running the command.
 The explicit destination is the authorization to POST the payment payload; the

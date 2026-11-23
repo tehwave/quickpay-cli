@@ -14,18 +14,8 @@ final readonly class AuthenticatedQuickpay
         public PaymentApi $payments,
     ) {}
 
-    public function safeJson(string $body): string
-    {
-        return ResponseBodySanitizer::json($body, $this->apiKey->value());
-    }
-
     public function safeLine(string $value): string
     {
         return ResponseBodySanitizer::terminalLine($value, $this->apiKey->value());
-    }
-
-    public function safeText(string $value): string
-    {
-        return ResponseBodySanitizer::terminalText($value, $this->apiKey->value());
     }
 }

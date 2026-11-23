@@ -6,9 +6,10 @@ use App\Console\Output\QuickpayDescriber;
 use App\Console\Terminal\NativeStdinTerminalDetector;
 use App\Console\Terminal\StdinTerminalDetector;
 use App\Credentials\ApiKeyResolver;
-use App\Credentials\CredentialFile;
 use App\Credentials\EnvironmentVariables;
 use App\Credentials\HomeDirectory;
+use App\Credentials\MerchantStore;
+use App\Credentials\ProjectMerchantFile;
 use App\Quickpay\AuthenticatedQuickpayFactory;
 use Illuminate\Support\ServiceProvider;
 use NunoMaduro\LaravelConsoleSummary\Contracts\DescriberContract;
@@ -27,9 +28,10 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(EnvironmentVariables::class);
         $this->app->singleton(HomeDirectory::class);
         $this->app->singleton(
-            CredentialFile::class,
-            fn ($app): CredentialFile => CredentialFile::inHome($app->make(HomeDirectory::class)),
+            MerchantStore::class,
+            fn ($app): MerchantStore => MerchantStore::inHome($app->make(HomeDirectory::class)),
         );
+        $this->app->singleton(ProjectMerchantFile::class);
         $this->app->singleton(ApiKeyResolver::class);
         $this->app->singleton(AuthenticatedQuickpayFactory::class);
         $this->app->singleton(StdinTerminalDetector::class, NativeStdinTerminalDetector::class);

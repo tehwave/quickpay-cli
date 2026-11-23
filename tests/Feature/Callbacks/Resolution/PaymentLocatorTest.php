@@ -2,6 +2,7 @@
 
 use App\Callbacks\Resolution\PaymentLocator;
 use App\Callbacks\Watching\CallbackPollingException;
+use App\Credentials\MerchantAccess;
 use App\Quickpay\QuickpayClient;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
@@ -18,7 +19,7 @@ it('scans changed payments with the exact updated-at window and fetches each ful
         'https://api.quickpay.net/payments/43' => Http::response(['id' => 43, 'operations' => []]),
     ]);
 
-    $locator = new PaymentLocator(new QuickpayClient(app(Factory::class), 'api-key'));
+    $locator = new PaymentLocator(new QuickpayClient(app(Factory::class), 'api-key', MerchantAccess::full()));
     $payments = $locator->changedBetween(
         new DateTimeImmutable('2026-08-07T10:00:00+02:00'),
         new DateTimeImmutable('2026-08-07T10:00:05+02:00'),
@@ -176,7 +177,7 @@ it('fetches a fixed payment by id', function () {
         'merchant_id' => 123,
     ])]);
 
-    $locator = new PaymentLocator(new QuickpayClient(app(Factory::class), 'api-key'));
+    $locator = new PaymentLocator(new QuickpayClient(app(Factory::class), 'api-key', MerchantAccess::full()));
     $payment = $locator->byId('42');
 
     expect($payment->json['id'])->toBe(42);
@@ -195,7 +196,7 @@ it('resolves an exact order match with a bounded lookup and then fetches its cur
         ]),
     ]);
 
-    $locator = new PaymentLocator(new QuickpayClient(app(Factory::class), 'api-key'));
+    $locator = new PaymentLocator(new QuickpayClient(app(Factory::class), 'api-key', MerchantAccess::full()));
     $payment = $locator->byOrderId('order-42');
 
     expect($payment?->json['id'])->toBe(42);
@@ -206,7 +207,7 @@ it('resolves an exact order match with a bounded lookup and then fetches its cur
 it('returns null for a missing order but rejects ambiguous or malformed lookup responses', function (array $response, ?string $message) {
     Http::fake(['https://api.quickpay.net/payments?*' => Http::response($response)]);
 
-    $locator = new PaymentLocator(new QuickpayClient(app(Factory::class), 'api-key'));
+    $locator = new PaymentLocator(new QuickpayClient(app(Factory::class), 'api-key', MerchantAccess::full()));
 
     if ($message === null) {
         expect($locator->byOrderId('order-42'))->toBeNull();
@@ -232,7 +233,7 @@ it('classifies retryable polling responses and keeps authentication or missing-p
         $retryAfter === null ? [] : ['Retry-After' => (string) $retryAfter],
     )]);
 
-    $locator = new PaymentLocator(new QuickpayClient(app(Factory::class), 'api-key'));
+    $locator = new PaymentLocator(new QuickpayClient(app(Factory::class), 'api-key', MerchantAccess::full()));
 
     try {
         $locator->byId('42');
@@ -251,5 +252,5 @@ it('classifies retryable polling responses and keeps authentication or missing-p
 
 function paymentLocator(): PaymentLocator
 {
-    return new PaymentLocator(new QuickpayClient(app(Factory::class), 'api-key'));
+    return new PaymentLocator(new QuickpayClient(app(Factory::class), 'api-key', MerchantAccess::full()));
 }

@@ -62,6 +62,7 @@ class CreatePaymentLinkCommand extends AuthenticatedCommand
                 $body['auto_capture'] = true;
             }
 
+            $this->writeMerchantContext($authenticated);
             $result = $authenticated->payments->link($id, $body);
             $link = $result->data;
             $url = $link['url'] ?? null;

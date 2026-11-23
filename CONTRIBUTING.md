@@ -50,7 +50,7 @@ alignment and the main structural boundaries.
 - Preserve original API JSON in `--json` mode unless credential sanitization is
   required.
 - Use integer minor units for amounts.
-- Update the README, command help, and `skills/quickpay/SKILL.md` when the CLI
+- Update the README, command help, and `skills/quickpay-cli/SKILL.md` when the CLI
   contract or safety workflow changes.
 - Check current Quickpay documentation before changing API behavior; do not
   infer the remote contract solely from existing code.

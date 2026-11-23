@@ -20,7 +20,6 @@ final class CallbackEnvelopeFactory
         QuickpayResponse $response,
         string $apiKey,
         string $privateKey,
-        ?string $operationId = null,
     ): CallbackEnvelope {
         $resource = json_decode($response->rawBody);
 
@@ -46,7 +45,6 @@ final class CallbackEnvelopeFactory
                 'QuickPay-API-Version' => QuickpayClient::API_VERSION,
                 'QuickPay-Checksum-Sha256' => hash_hmac('sha256', $body, $privateKey),
             ],
-            operationId: $operationId,
         );
     }
 

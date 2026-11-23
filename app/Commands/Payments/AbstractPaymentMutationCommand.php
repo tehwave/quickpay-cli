@@ -10,9 +10,7 @@ use App\Console\Output\ResponseBodySanitizer;
 use App\Quickpay\AuthenticatedQuickpay;
 use App\Quickpay\AuthenticatedQuickpayFactory;
 use App\Quickpay\Payments\PaymentMutation;
-use Illuminate\Console\OutputStyle;
 use InvalidArgumentException;
-use Symfony\Component\Console\Output\OutputInterface;
 
 /**
  * Executes payment mutations behind a shared inspect-and-confirm workflow.
@@ -28,6 +26,10 @@ abstract class AbstractPaymentMutationCommand extends AuthenticatedCommand
         PaymentPresenter $presenter,
     ): int {
         return $this->withQuickpay($quickpay, function (AuthenticatedQuickpay $authenticated) use ($confirmation, $presenter): int {
+            // Capture, refund, and cancel are POST requests. Checking access
+            // first keeps a read-only merchant from inspecting and prompting
+            // for a mutation it can never send.
+            $authenticated->client->authorize('POST');
             $apiKey = $authenticated->apiKey->value();
             $id = IntegerInput::positive($this->argument('id'), 'id');
             $body = $this->mutationBody();
@@ -39,11 +41,11 @@ abstract class AbstractPaymentMutationCommand extends AuthenticatedCommand
                 body: $body,
                 query: $query,
                 headers: $headers,
-                confirm: function (array $payment) use ($apiKey, $body, $confirmation, $presenter): bool {
+                confirm: function (array $payment) use ($authenticated, $body, $confirmation, $presenter): bool {
                     $this->writeMutationSummary(
                         $payment,
                         $body['amount'] ?? null,
-                        $apiKey,
+                        $authenticated,
                         $presenter,
                     );
 
@@ -89,9 +91,11 @@ abstract class AbstractPaymentMutationCommand extends AuthenticatedCommand
     private function writeMutationSummary(
         array $payment,
         mixed $amount,
-        string $apiKey,
+        AuthenticatedQuickpay $authenticated,
         PaymentPresenter $presenter,
     ): void {
+        $this->writeMerchantContext($authenticated);
+        $apiKey = $authenticated->apiKey->value();
         $fields = [
             'Payment ID' => $payment['id'] ?? null,
             'Order ID' => $payment['order_id'] ?? null,
@@ -101,6 +105,10 @@ abstract class AbstractPaymentMutationCommand extends AuthenticatedCommand
             'Balance (minor units)' => $payment['balance'] ?? null,
             'Operation' => $this->operation(),
         ];
+
+        if (isset($payment['merchant_id'])) {
+            $fields = ['Merchant ID' => $payment['merchant_id'], ...$fields];
+        }
 
         if ($amount !== null) {
             $fields['Amount (minor units)'] = $amount;
@@ -128,32 +136,5 @@ abstract class AbstractPaymentMutationCommand extends AuthenticatedCommand
         }
 
         return ['QuickPay-Callback-Url' => $callback];
-    }
-
-    private function writeSafetyLine(string $message): void
-    {
-        // JSON mode reserves stdout for the response document. Human safety
-        // context and prompts therefore move to stderr.
-        $output = $this->option('json')
-            ? $this->getOutput()->getErrorStyle()
-            : $this->getOutput();
-
-        $output->writeln($message, OutputInterface::OUTPUT_RAW);
-    }
-
-    private function confirmMutation(): bool
-    {
-        if (! $this->option('json')) {
-            return $this->confirm('Continue?');
-        }
-
-        $output = $this->output;
-        $this->output = new OutputStyle($this->input, $output->getErrorStyle());
-
-        try {
-            return $this->confirm('Continue?');
-        } finally {
-            $this->output = $output;
-        }
     }
 }
