@@ -55,6 +55,27 @@ jobs:
           tools: composer:2.10.2
       - run: composer install --no-interaction --no-progress --prefer-dist
       - run: composer test
+      # Packagist installs the committed PHAR, so check that it is the newest
+      # release and still starts on this PHP version, outside the project.
+      - name: Smoke-test the committed PHAR
+        run: |
+          phar="$GITHUB_WORKSPACE/builds/quickpay"
+          released="$(grep -m1 -oE '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md | tr -d '#[] ')"
+          test "$(php "$phar" --version)" = "Quickpay $released"
+          export HOME="$RUNNER_TEMP/home"
+          mkdir -p "$HOME"
+          cd "$RUNNER_TEMP"
+          php "$phar" list --raw > commands.txt
+          grep -q '^about ' commands.txt
+          php "$phar" about > /dev/null
+          if output="$(php "$phar" payments:list --no-interaction 2>&1)"; then
+            echo "payments:list should fail without a merchant."
+            exit 1
+          fi
+          if grep -qiE 'fatal|uncaught|stack trace' <<< "$output"; then
+            echo "$output"
+            exit 1
+          fi
 
   coverage:
     runs-on: ubuntu-latest
