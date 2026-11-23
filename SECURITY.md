@@ -81,7 +81,9 @@ destination. The account private key comes from a non-empty
 `QUICKPAY_PRIVATE_KEY` or the authenticated `/account/private-key` endpoint and
 is retained in process memory only. It is never written to the CLI config,
 stdout, stderr, or local response summaries. A manually supplied
-`QUICKPAY_PRIVATE_KEY` must belong to the selected merchant.
+`QUICKPAY_PRIVATE_KEY` must belong to the selected merchant. Because nothing ties
+it to one, `callbacks:watch` and `callbacks:replay` warn when it is set while a
+saved merchant is selected.
 
 Because `--to` may name a public service, inspect it before running the command.
 The explicit destination is the authorization to POST the payment payload; the

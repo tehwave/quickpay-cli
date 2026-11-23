@@ -4,6 +4,7 @@ use App\Callbacks\Delivery\CallbackTarget;
 use App\Callbacks\Watching\CallbackWatcher;
 use App\Callbacks\Watching\CallbackWatcherFactory;
 use App\Commands\Api\ApiRequestCommand;
+use App\Commands\Callbacks\ReplayCallbackCommand;
 use App\Commands\Callbacks\WatchCallbacksCommand;
 use App\Commands\Payments\CancelPaymentCommand;
 use App\Commands\Payments\CapturePaymentCommand;
@@ -271,3 +272,60 @@ it('still writes through a write-only merchant', function (): void {
     Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
         && $request->header('Authorization') === ['Basic '.base64_encode(':fake-secret-w')]);
 });
+
+it('warns when QUICKPAY_PRIVATE_KEY signs replayed callbacks for a saved merchant', function (bool $json): void {
+    Http::fake([
+        'https://api.quickpay.net/payments/42*' => Http::response(['id' => 42, 'merchant_id' => 123, 'order_id' => 'order-42', 'operations' => []]),
+        'http://localhost/callback' => Http::response('', 204),
+    ]);
+    $command = new ReplayCallbackCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+    $exit = $tester->execute(['payment-id' => '42', '--to' => 'http://localhost/callback', '--merchant' => 'shop-b', '--json' => $json], ['capture_stderr_separately' => true]);
+    $warnings = $json ? $tester->getErrorOutput() : $tester->getDisplay();
+    expect($exit)->toBe(0)
+        ->and($warnings)->toContain('Warning: QUICKPAY_PRIVATE_KEY is set, so callbacks are signed with it instead of the account private key of shop-b. Unset it if it belongs to another merchant.')
+        ->and($tester->getDisplay().$tester->getErrorOutput())->not->toContain('fake-signing-key');
+    if ($json) {
+        expect(json_decode($tester->getDisplay(), true, flags: JSON_THROW_ON_ERROR)['success'])->toBeTrue();
+    }
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/account/private-key'));
+})->with(['human' => false, 'JSON' => true]);
+
+it('warns before watching when QUICKPAY_PRIVATE_KEY signs callbacks for a saved merchant', function (): void {
+    app()->instance(CallbackWatcherFactory::class, new class extends CallbackWatcherFactory
+    {
+        public function __construct() {}
+
+        public function make(QuickpayClient $quickpay, Factory $http): CallbackWatcher
+        {
+            return new class implements CallbackWatcher
+            {
+                public function run(?string $paymentId, ?string $orderId, CallbackTarget $target, string $apiKey, string $privateKey, int $interval, int $deliveryAttempts, Closure $observer): void {}
+            };
+        }
+    });
+    $this->artisan('callbacks:watch', ['payment-id' => '42', '--to' => 'http://localhost/callback'])
+        ->expectsOutputToContain('Merchant: shop-a')
+        ->expectsOutputToContain('Warning: QUICKPAY_PRIVATE_KEY is set, so callbacks are signed with it instead of the account private key of shop-a.')
+        ->assertExitCode(0);
+    Http::assertNothingSent();
+});
+
+it('does not warn about the private key when it cannot belong to another saved merchant', function (bool $environmentApiKey): void {
+    if ($environmentApiKey) {
+        putenv('QUICKPAY_API_KEY=fake-environment');
+    } else {
+        putenv('QUICKPAY_PRIVATE_KEY');
+    }
+    Http::fake([
+        'https://api.quickpay.net/payments/42*' => Http::response(['id' => 42, 'merchant_id' => 123, 'order_id' => 'order-42', 'operations' => []]),
+        'https://api.quickpay.net/account/private-key' => Http::response(['private_key' => 'fake-account-signing-key']),
+        'http://localhost/callback' => Http::response('', 204),
+    ]);
+    $command = new ReplayCallbackCommand;
+    $command->setLaravel(app());
+    $tester = new CommandTester($command);
+    expect($tester->execute(['payment-id' => '42', '--to' => 'http://localhost/callback'], ['capture_stderr_separately' => true]))->toBe(0)
+        ->and($tester->getDisplay().$tester->getErrorOutput())->not->toContain('QUICKPAY_PRIVATE_KEY');
+})->with(['environment API key' => true, 'saved merchant fetching its own key' => false]);

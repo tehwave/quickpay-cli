@@ -3,6 +3,7 @@
 namespace App\Commands\Callbacks;
 
 use App\Callbacks\Input\CallbackRequest;
+use App\Callbacks\Resolution\PrivateKeyResolver;
 use App\Callbacks\WatchCallbacks;
 use App\Console\AuthenticatedCommand;
 use App\Console\Input\IntegerInput;
@@ -43,10 +44,11 @@ class WatchCallbacksCommand extends AuthenticatedCommand
     public function handle(
         AuthenticatedQuickpayFactory $quickpay,
         WatchCallbacks $watch,
+        PrivateKeyResolver $privateKeys,
     ): int {
         return $this->withQuickpay(
             $quickpay,
-            function (AuthenticatedQuickpay $authenticated) use ($watch): int {
+            function (AuthenticatedQuickpay $authenticated) use ($watch, $privateKeys): int {
                 $request = CallbackRequest::forWatch(
                     $this->argument('payment-id'),
                     $this->option('order-id'),
@@ -56,6 +58,10 @@ class WatchCallbacksCommand extends AuthenticatedCommand
                 $deliveryAttempts = $this->deliveryAttempts();
                 $apiKey = $authenticated->apiKey->value();
                 $this->writeMerchantContext($authenticated);
+                $warning = $privateKeys->overrideWarning($authenticated->apiKey);
+                if ($warning !== null) {
+                    $this->writeSafetyLine($authenticated->safeLine($warning));
+                }
 
                 if ($request->paymentId !== null || $request->orderId !== null) {
                     $this->info(ResponseBodySanitizer::terminalLine(

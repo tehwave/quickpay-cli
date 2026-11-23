@@ -150,7 +150,9 @@ quickpay callbacks:replay <payment-id> --to=<corrected-url>
 `QUICKPAY_PRIVATE_KEY` is an optional sensitive environment override; never
 ask the user to paste it into chat or place it in a command argument. Without
 it, the CLI retrieves the key through the authenticated API and retains it only
-in memory. An explicit override must belong to the selected merchant. A watcher
+in memory. An explicit override must belong to the selected merchant; the
+callback commands warn when it is set while a saved merchant is selected. If
+that warning appears, tell the user rather than unsetting the variable. A watcher
 keeps the merchant and key resolved at startup even if saved selection changes.
 
 ## Raw API guardrails

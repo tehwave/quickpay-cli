@@ -107,6 +107,11 @@ To send a payment's current resource once:
 quickpay callbacks:replay <payment-id> --to=http://127.0.0.1:8000/quickpay/callback
 ```
 
+Callbacks are signed with the merchant's private key, which the CLI fetches from
+Quickpay. Set `QUICKPAY_PRIVATE_KEY` to use your own instead. Both commands warn
+when it is set while a saved merchant is selected, because it may belong to
+another merchant.
+
 ## For agents
 
 Install the bundled [quickpay-cli skill](skills/quickpay-cli/SKILL.md):
