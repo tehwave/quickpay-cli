@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-23
+
 ### Added
 
 - Named merchants. `merchants:add`, `merchants:list`, `merchants:select`, `merchants:active` and `merchants:remove` save and choose between several Quickpay merchants, and every authenticated command takes `--merchant`.
@@ -16,12 +18,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- The PHAR no longer bundles the PHPStan and Larastan development tools, so it is about half the size of 0.2.0's.
 - The bundled agent skill is renamed from `quickpay` to `quickpay-cli`. Remove the old `quickpay` skill folder from your agent's skills directory, then run `skills add tehwave/quickpay-cli`.
 
 ### Removed
 
 - **Breaking:** the `login`, `logout` and `auth` commands. Save a merchant with `quickpay merchants:add <name>`, and use `merchants:active --check` instead of `auth --check`.
 - **Breaking:** the single-key configuration in `~/.config/quickpay/config.json` is no longer read. Add your merchant again with `merchants:add`, then delete the old file. `merchants:add` reminds you while it still exists.
+
+### Security
+
+- The bundled Symfony HTTP Foundation, HTTP Kernel and Mime packages are updated to releases that fix published security advisories.
 
 ## [0.2.0] - 2026-08-10
 
